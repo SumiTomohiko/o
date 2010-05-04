@@ -5,6 +5,7 @@ export TMPDIR=$$
 
 find . -type f -name "test_*" | while read f
 do
+  mkdir -p "${TMPDIR}"
   "${f}"
   if [ $? -ne 0 ]; then
     echo "${f} failed"
