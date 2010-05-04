@@ -1,0 +1,7 @@
+#!/bin/sh
+
+cat <<EOF | ${O} put "${TMPDIR}/db"
+foobarbazquuxhogefugapiyo
+EOF
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
