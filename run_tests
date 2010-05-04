@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export O="`pwd`/o"
+export O="`pwd`/src/o"
 export TMPDIR=$$
 
 find . -type f -name "test_*" | while read f
