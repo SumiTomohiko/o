@@ -10,6 +10,9 @@ config.log
 config.status
 config.sub
 depcomp
+include/o/config.h
+include/o/config.h.in
+include/o/stamp-h1
 install-sh
 libtool
 ltmain.sh
