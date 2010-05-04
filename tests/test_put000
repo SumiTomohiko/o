@@ -1,5 +1,6 @@
 #!/bin/sh
 
+${O} create "${TMPDIR}/db"
 cat <<EOF | ${O} put "${TMPDIR}/db"
 foobarbazquuxhogefugapiyo
 EOF
