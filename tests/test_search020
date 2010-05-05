@@ -1,0 +1,15 @@
+#!/bin/sh
+
+db="${TMPDIR}/db"
+${O} create "${db}"
+cat <<EOF | ${O} put "${db}"
+hogefugapiyo
+EOF
+cat <<EOF | ${O} put "${db}"
+foobarbaz
+EOF
+if [ "`${O} search "${db}" foo`" != "1" ]; then
+  exit 1
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
