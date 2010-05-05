@@ -1,6 +1,9 @@
 
 SUBDIRS = tokyocabinet src
 
+install:
+	cd src && $(MAKE) install
+
 test:
 	./run_tests
 
