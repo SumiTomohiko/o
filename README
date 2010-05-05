@@ -1,0 +1,22 @@
+o (shaling) 0.0.1
+=================
+
+What is this?
+-------------
+
+o (shaling) is a full text search engine.
+
+o is pronounced as "shaling". "shaling" is a Japanese, and means a "wheel". o's
+shape is wheel, so this is "shaling". And, o also means
+"\(^o^)/ My life is over" (see doc/google.png).
+
+There is a mailer named Shaling
+(http://www.unixuser.org/~euske/python/shaling/), nobody won't be confused.
+
+What the author wants
+---------------------
+
+* ambiguity search
+* boolean search (ex. foo AND bar OR baz)
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
