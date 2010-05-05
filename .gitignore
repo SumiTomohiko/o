@@ -2,6 +2,7 @@
 *.lo
 *.o
 .deps
+.gdb_history
 .libs
 aclocal.m4
 autom4te.cache
@@ -10,6 +11,7 @@ config.guess
 config.log
 config.status
 config.sub
+core
 depcomp
 include/o/config.h
 include/o/config.h.in
