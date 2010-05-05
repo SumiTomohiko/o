@@ -1,7 +1,10 @@
 #include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tcutil.h"
 #include "o.h"
 
 static void
@@ -16,7 +19,7 @@ static void
 print_error(const char* msg, const char* reason)
 {
     if (reason[0] == '\0') {
-        fprintf(stderr, "%s", msg);
+        fprintf(stderr, "%s\n", msg);
         return;
     }
     fprintf(stderr, "%s - %s\n", msg, reason);
@@ -25,31 +28,19 @@ print_error(const char* msg, const char* reason)
 static char*
 read_file(oDB* db, FILE* fp)
 {
-    size_t size = 4096;
-    char* s = (char*)malloc(size);
+    TCXSTR* xstr = tcxstrnew();
+    char buf[4096];
+    while (fgets(buf, array_sizeof(buf), fp) != NULL) {
+        tcxstrcat2(xstr, buf);
+    }
+    char* s = (char*)malloc(tcxstrsize(xstr));
     if (s == NULL) {
         print_error("malloc failed", strerror(errno));
+        tcxstrdel(xstr);
         return NULL;
     }
-    s[0] = '\0';
-    char buf[4096];
-    char* pend = s;
-    while (fgets(buf, array_sizeof(buf), fp) != NULL) {
-        size_t len = strlen(buf);
-        if (s + size <= pend + len) {
-            size_t new_size = size + 4096;
-            char* t = (char*)realloc(s, new_size);
-            if (t == NULL) {
-                print_error("realloc failed", strerror(errno));
-                free(s);
-                return NULL;
-            }
-            pend = t + (pend - s);
-            s = t;
-            size = new_size;
-        }
-        memcpy(pend, buf, len + 1);
-    }
+    strcpy(s, tcxstrptr(xstr));
+    tcxstrdel(xstr);
 
     return s;
 }
@@ -78,6 +69,10 @@ static int
 put_doc(oDB* db, const char* path, const char* doc)
 {
     if (open_db_to_write(db, path) != 0) {
+        return 1;
+    }
+    if (oDB_put(db, doc) != 0) {
+        print_error("Can't put document", db->msg);
         return 1;
     }
     if (close_db(db) != 0) {
