@@ -1,0 +1,10 @@
+#!/bin/sh
+
+db="${TMPDIR}/db"
+${O} create "${db}"
+cat "${TOP_SRCDIR}/samples/russel-einstein-manifesto.ja" | ${O} put "${db}"
+if [ X"`${O} search "${db}" foo`" != X"0" ]; then
+  exit 1
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
