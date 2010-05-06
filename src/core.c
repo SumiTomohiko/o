@@ -13,6 +13,26 @@
 #include "tcutil.h"
 #include "o.h"
 
+/**
+ * -Werror option stops compile if unused functions found. So I implement this
+ * as a macro.
+ */
+#define DUMP_POSTING_LIST(list) do { \
+    printf("%s:%u <", __FILE__, __LINE__); \
+    int num = tclistnum((list)); \
+    int i; \
+    for (i = 0; i < num; i++) { \
+        Posting* posting = *((Posting**)tclistval2((list), i)); \
+        printf("<%d:", posting->doc_id); \
+        int j; \
+        for (j = 0; j < posting->offset_size; j++) { \
+            printf("%d", posting->offset[j]); \
+        } \
+        printf(">"); \
+    } \
+    printf(">\n"); \
+} while (0)
+
 static void
 set_msg(oDB* db, const char* s, const char* t)
 {
@@ -305,6 +325,7 @@ oDB_put(oDB* db, const char* doc)
 
 struct Posting {
     o_doc_id_t doc_id;
+    int term_size;
     int* offset;
     int offset_size;
 };
@@ -329,11 +350,42 @@ decompress_num(const char* p, int* size)
 }
 
 static Posting*
-decompress_posting(oDB* db, const char* compressed_posting)
+Posting_new(oDB* db)
 {
     Posting* posting = (Posting*)malloc(sizeof(Posting));
     if (posting == NULL) {
-        set_msg_of_errno(db, "Can't allocate Posting");
+        set_msg_of_errno(db, "Can't allocate memory");
+        return NULL;
+    }
+    posting->doc_id = 0;
+    posting->term_size = 0;
+    posting->offset = NULL;
+    posting->offset_size = 0;
+    return posting;
+}
+
+static Posting*
+Posting_of_offset_size(oDB* db, int offset_size)
+{
+    Posting* posting = Posting_new(db);
+    if (posting == NULL) {
+        return NULL;
+    }
+    int* offset = (int*)malloc(sizeof(int) * offset_size);
+    if (offset == NULL) {
+        set_msg_of_errno(db, "malloc failed");
+        return NULL;
+    }
+    posting->offset = offset;
+    posting->offset_size = offset_size;
+    return posting;
+}
+
+static Posting*
+decompress_posting(oDB* db, const char* compressed_posting)
+{
+    Posting* posting = Posting_new(db);
+    if (posting == NULL) {
         return NULL;
     }
     const char* p = compressed_posting;
@@ -384,44 +436,167 @@ search_posting_list(oDB* db, const char* term, int term_size)
         if (posting == NULL) {
             return NULL;
         }
+        posting->term_size = term_size;
         tclistpush(posting_list, &posting, sizeof(posting));
     }
     tclistdel(compressed_posting_list);
     return posting_list;
 }
 
-int
-oDB_search(oDB* db, const char* phrase)
+static void
+Posting_delete(oDB* db, Posting* posting)
 {
-    TCLIST* posting_lists = tclistnew();
+    free(posting->offset);
+    free(posting);
+}
+
+static TCLIST*
+intersect(oDB* db, TCLIST* posting_list1, TCLIST* posting_list2, int gap)
+{
+    /**
+     * This function assume that postings stand in ascending order of the
+     * document ID. It seems depend on Tokyo Cabinet implementation.
+     */
+    TCLIST* result = tclistnew();
+    int num1 = tclistnum(posting_list1);
+    int num2 = tclistnum(posting_list2);
+    int i = 0;
+    int j = 0;
+    while ((i < num1) && (j < num2)) {
+        Posting* posting1 = *((Posting**)tclistval2(posting_list1, i));
+        Posting* posting2 = *((Posting**)tclistval2(posting_list2, j));
+        if (posting1->doc_id < posting2->doc_id) {
+            i++;
+            continue;
+        }
+        if (posting2->doc_id < posting1->doc_id) {
+            j++;
+            continue;
+        }
+
+        int offset_size_min = posting1->offset_size < posting2->offset_size ? posting1->offset_size : posting2->offset_size;
+        int offset[offset_size_min];
+        int offset_size = 0;
+        int k = 0;
+        int l = 0;
+        while ((k < posting1->offset_size) && (l < posting2->offset_size)) {
+            int offset_end = posting1->offset[k] + gap;
+            if (offset_end < posting2->offset[l]) {
+                k++;
+                continue;
+            }
+            if (posting2->offset[l] < offset_end) {
+                l++;
+                continue;
+            }
+            offset[offset_size] = posting1->offset[k];
+            offset_size++;
+            k++;
+            l++;
+        }
+        if (0 < offset_size) {
+            Posting* posting = Posting_of_offset_size(db, offset_size);
+            if (posting == NULL) {
+                return NULL;
+            }
+            posting->doc_id = posting1->doc_id;
+            posting->term_size = posting2->offset[l] + posting2->term_size - posting1->offset[k];
+            memcpy(posting->offset, offset, sizeof(offset[0]) * offset_size);
+            posting->offset_size = offset_size;
+            tclistpush(result, &posting, sizeof(posting));
+        }
+
+        i++;
+        j++;
+    }
+
+    return result;
+}
+
+static void
+delete_posting_list(oDB* db, TCLIST* posting_list)
+{
+    int num = tclistnum(posting_list);
+    int i;
+    for (i = 0; i < num; i++) {
+        Posting* posting = *((Posting**)tclistval2(posting_list, i));
+        Posting_delete(db, posting);
+    }
+    tclistdel(posting_list);
+}
+
+int
+oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
+{
+    *doc_ids = NULL;
+
+    int term_size = get_term_size(phrase);
+    TCLIST* posting_list1 = search_posting_list(db, phrase, term_size);
+    if (posting_list1 == NULL) {
+        return 1;
+    }
+    if (tclistnum(posting_list1) == 0) {
+        return 0;
+    }
+
     size_t size = strlen(phrase);
-    unsigned int pos = 0;
+    unsigned int pos = term_size;
     unsigned int prev_pos = 0;
     do {
         int char_size = get_char_size(phrase[pos]);
-        int from = size <= pos + char_size ? prev_pos + get_char_size(phrase[prev_pos]) : pos;
-        const char* term = &phrase[from];
-        int term_size = get_term_size(term);
-        TCLIST* posting_list = search_posting_list(db, term, term_size);
-        if (posting_list == NULL) {
+        int gap;
+        int from;
+        const char* term;
+        int term_size;
+        if (size <= pos + char_size) {
+            gap = get_char_size(phrase[prev_pos]);
+            from = prev_pos + gap;
+            term = &phrase[from];
+            term_size = get_term_size(term);
+        }
+        else {
+            from = pos;
+            term = &phrase[from];
+            gap = term_size = get_term_size(term);
+        }
+        TCLIST* posting_list2 = search_posting_list(db, term, term_size);
+        if (posting_list2 == NULL) {
+            tclistdel(posting_list1);
             return 1;
         }
-        tclistpush(posting_lists, &posting_list, sizeof(posting_list));
+        if (tclistnum(posting_list2) == 0) {
+            tclistdel(posting_list1);
+            tclistdel(posting_list2);
+            return 0;
+        }
+
+        TCLIST* intersected = intersect(db, posting_list1, posting_list2, gap);
+        delete_posting_list(db, posting_list1);
+        delete_posting_list(db, posting_list2);
+        if (intersected == NULL) {
+            return 1;
+        }
 
         prev_pos = from;
         pos = from + term_size;
+        posting_list1 = intersected;
     } while (pos < size);
 
-    int i;
-    for (i = 0; i < tclistnum(posting_lists); i++) {
-        int sp;
-        TCLIST** p = (TCLIST**)tclistval(posting_lists, i, &sp);
-        assert(sp == sizeof(*p));
-        assert(p != NULL);
-        tclistdel(*p);
+    int num = tclistnum(posting_list1);
+    *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * num);
+    if (*doc_ids == NULL) {
+        set_msg_of_errno(db, "malloc failed");
+        delete_posting_list(db, posting_list1);
+        return 1;
     }
-    tclistdel(posting_lists);
+    int i;
+    for (i = 0; i < num; i++) {
+        Posting* posting = *((Posting**)tclistval2(posting_list1, i));
+        (*doc_ids)[i] = posting->doc_id;
+    }
+    *doc_ids_size = num;
 
+    delete_posting_list(db, posting_list1);
     return 0;
 }
 

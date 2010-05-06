@@ -5,7 +5,7 @@ ${O} create "${db}"
 cat <<EOF | ${O} put "${db}"
 foobarbazquuxhogefugapiyo
 EOF
-if [ X"`${O} search "${db}" foo`" != X"1" ]; then
+if [ X"`${O} search "${db}" foo`" != X"0" ]; then
   exit 1
 fi
 

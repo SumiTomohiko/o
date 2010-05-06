@@ -104,13 +104,20 @@ search(oDB* db, int argc, const char* argv[])
     if (open_db_to_read(db, argv[0]) != 0) {
         return 1;
     }
-    if (oDB_search(db, argv[1]) != 0) {
+    o_doc_id_t* doc_ids;
+    int size;
+    if (oDB_search(db, argv[1], &doc_ids, &size) != 0) {
         print_error("Can't search document", db->msg);
         return 1;
     }
     if (close_db(db) != 0) {
         return 1;
     }
+    int i;
+    for (i = 0; i < size; i++) {
+        printf("%d\n", doc_ids[i]);
+    }
+    free(doc_ids);
     return 0;
 }
 

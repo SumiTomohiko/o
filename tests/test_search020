@@ -8,7 +8,7 @@ EOF
 cat <<EOF | ${O} put "${db}"
 foobarbaz
 EOF
-if [ "`${O} search "${db}" foo`" != "1" ]; then
+if [ X"`${O} search "${db}" foo`" != X"1" ]; then
   exit 1
 fi
 
