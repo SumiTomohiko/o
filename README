@@ -13,6 +13,13 @@ shape is wheel, so this is "shaling". And, o also means
 There is a mailer named Shaling
 (http://www.unixuser.org/~euske/python/shaling/), nobody won't be confused.
 
+Issue tracking system and known bugs
+------------------------------------
+
+This project uses ditz (http://ditz.rubyforge.org/) as an issues management
+system. You can see issues and known bugs at
+http://neko-daisuki.ddo.jp/~SumiTomohiko/o/issues/.
+
 What the author wants
 ---------------------
 
