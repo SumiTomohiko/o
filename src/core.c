@@ -290,7 +290,7 @@ oDB_put(oDB* db, const char* doc)
     while (pos < size) {
         const char* pc = &doc[pos];
         int term_size = get_term_size(pc);
-        tcmapaddint(term2pos, pc, term_size, pos);
+        tcmapputcat(term2pos, pc, term_size, &pos, sizeof(pos));
         pos += get_char_size(doc[pos]);
     }
 
