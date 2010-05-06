@@ -1,6 +1,7 @@
 #!/bin/sh
 
-export O="`pwd`/src/o"
+export TOP_SRCDIR=`pwd`
+export O="${TOP_SRCDIR}/src/o"
 export TMPDIR=$$
 
 find . -type f -name "test_*" | while read f
