@@ -19,4 +19,14 @@ What the author wants
 * ambiguity search
 * boolean search (ex. foo AND bar OR baz)
 
+Other full text search engines
+------------------------------
+
+* Hyper Estraier (http://hyperestraier.sourceforge.net/index.html)
+* Tokyo Dystopia (http://1978th.net/tokyodystopia/)
+* Rast (http://projects.netlab.jp/rast/?FrontPage.ja)
+* Namazu (http://www.namazu.org/index.html.en)
+* Lux (http://luxse.sourceforge.net/)
+* Senna (http://qwik.jp/senna/FrontPage.html)
+
 # vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
