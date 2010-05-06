@@ -45,7 +45,7 @@ static int
 open_index(oDB* db, const char* path, int omode)
 {
     char index[1024];
-    snprintf(index, array_sizeof(index), "%s/index", path);
+    snprintf(index, array_sizeof(index), "%s/index.tcb", path);
     if (!tcbdbopen(db->index, index, omode)) {
         set_msg(db, "Can't open index", tcbdberrmsg(tcbdbecode(db->index)));
         return 1;
