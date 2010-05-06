@@ -1,0 +1,21 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Search by one charactor
+desc: "$ src/o create db\n\
+  $ src/o put db < samples/russel-einstein-manifesto.ja\n\
+  $ src/o search db \xE7\xA7\x81\n\
+  (no output)"
+type: :bugfix
+component: core
+release: 
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-06 18:23:05.459330 Z
+references: []
+
+id: 0dce634bc7243f9fd079da1e39ec2bee438f8c7d
+log_events: 
+- - 2010-05-06 18:23:06.602705 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
