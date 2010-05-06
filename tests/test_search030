@@ -3,7 +3,7 @@
 db="${TMPDIR}/db"
 ${O} create "${db}"
 cat "${TOP_SRCDIR}/samples/russel-einstein-manifesto.ja" | ${O} put "${db}"
-if [ X"`${O} search "${db}" foo`" != X"0" ]; then
+if [ X"`${O} search "${db}" ノーベル`" != X"0" ]; then
   exit 1
 fi
 
