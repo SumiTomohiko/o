@@ -13,17 +13,6 @@
 #include "tcutil.h"
 #include "o.h"
 
-#if defined(__GNUC__)
-#   define TRACE(...) do { \
-    printf("%s:%d ", __FILE__, __LINE__); \
-    printf(__VA_ARGS__); \
-    printf("\n"); \
-    fflush(stdout); \
-} while (0)
-#else
-#   define TRACE
-#endif
-
 static void
 set_msg(oDB* db, const char* s, const char* t)
 {
@@ -174,23 +163,34 @@ copy_path(oDB* db, const char* path)
     return 0;
 }
 
-int
-oDB_open_to_write(oDB* db, const char* path)
+static int
+open_db(oDB* db, const char* path, int lock_operation, int omode)
 {
     if (copy_path(db, path) != 0) {
         return 1;
     }
-    if (lock_db(db, path, LOCK_EX) != 0) {
+    if (lock_db(db, path, lock_operation) != 0) {
         return 1;
     }
-    if (open_index(db, path, BDBOWRITER) != 0) {
+    if (open_index(db, path, omode) != 0) {
         return 1;
     }
     if (read_doc_id(db, path, &db->next_doc_id) != 0) {
         return 1;
     }
-
     return 0;
+}
+
+int
+oDB_open_to_read(oDB* db, const char* path)
+{
+    return open_db(db, path, LOCK_SH, BDBOREADER);
+}
+
+int
+oDB_open_to_write(oDB* db, const char* path)
+{
+    return open_db(db, path, LOCK_EX, BDBOWRITER);
 }
 
 static int
@@ -216,7 +216,7 @@ get_char_size(char c)
 }
 
 static int
-get_bigram_size(const char* pc)
+get_term_size(const char* pc)
 {
     int first_char_size = get_char_size(*pc);
     char second_char = pc[first_char_size];
@@ -227,7 +227,7 @@ get_bigram_size(const char* pc)
 }
 
 static void
-encode_num(int n, char* p, int* size)
+compress_num(int n, char* p, int* size)
 {
     int m = n;
     int i = 0;
@@ -238,58 +238,189 @@ encode_num(int n, char* p, int* size)
         m = higher;
         i++;
     } while (m != 0);
-    *size = i + 1;
+    *size = i;
 }
 
 static void
-encode_posting_info(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
+encode_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
 {
     char* p = data;
-    int size;
-    encode_num(doc_id, p, &size);
-    p += size;
+#define ENCODE(num) do { \
+    int size; \
+    compress_num((num), p, &size); \
+    p += size; \
+} while (0)
+    ENCODE(doc_id);
+    ENCODE(pos_num);
 
     int i;
     for (i = 0; i < pos_num; i++) {
-        encode_num(pos[i], p, &size);
-        p += size;
+        ENCODE(pos[i]);
     }
+#undef ENCODE
+    *data_size = p - data;
 }
 
 int
 oDB_put(oDB* db, const char* doc)
 {
-    TCMAP* bigram2pos = tcmapnew();
+    TCMAP* term2pos = tcmapnew();
     size_t size = strlen(doc);
     unsigned int pos = 0;
     while (pos < size) {
         const char* pc = &doc[pos];
-        int bigram_size = get_bigram_size(pc);
-        tcmapaddint(bigram2pos, pc, bigram_size, pos);
+        int term_size = get_term_size(pc);
+        tcmapaddint(term2pos, pc, term_size, pos);
         pos += get_char_size(doc[pos]);
     }
 
-    tcmapiterinit(bigram2pos);
+    tcmapiterinit(term2pos);
     int key_size;
     const void* key;
-    while ((key = tcmapiternext(bigram2pos, &key_size)) != NULL) {
+    while ((key = tcmapiternext(term2pos, &key_size)) != NULL) {
         int val_size;
-        const void* val = tcmapget(bigram2pos, key, key_size, &val_size);
+        const void* val = tcmapget(term2pos, key, key_size, &val_size);
         assert(val != NULL);
         assert(val_size % sizeof(int) == 0);
         int pos_num = val_size / sizeof(int);
         o_doc_id_t doc_id = db->next_doc_id;
         /**
-         * 1 of (1 + pos_num) is for a document id. Each number in posting
-         * information needs 8 bytes at most.
+         * 1 of (1 + pos_num) is for a document id. Each number in postings
+         * needs 8 bytes at most.
          */
         char data[(1 + pos_num) * 8];
         int data_size;
-        encode_posting_info(doc_id, (int*)val, pos_num, data, &data_size);
-        db->next_doc_id++;
+        encode_posting(doc_id, (int*)val, pos_num, data, &data_size);
+        if (!tcbdbputdup(db->index, key, key_size, data, data_size)) {
+            set_msg(db, "Can't register any term", tcbdberrmsg(tcbdbecode(db->index)));
+            return 1;
+        }
     }
 
-    tcmapdel(bigram2pos);
+    tcmapdel(term2pos);
+    db->next_doc_id++;
+
+    return 0;
+}
+
+struct Posting {
+    o_doc_id_t doc_id;
+    int* offset;
+    int offset_size;
+};
+
+typedef struct Posting Posting;
+
+static int
+decompress_num(const char* p, int* size)
+{
+    int n = 0;
+    int i = 0;
+    char m = 0;
+    int base = 1;
+    do {
+        m = p[i];
+        n += base * (m & 0x7f);
+        base *= 128;
+        i++;
+    } while ((m & 0x80) != 0);
+    *size = i;
+    return n;
+}
+
+static Posting*
+decompress_posting(oDB* db, const char* compressed_posting)
+{
+    Posting* posting = (Posting*)malloc(sizeof(Posting));
+    if (posting == NULL) {
+        set_msg_of_errno(db, "Can't allocate Posting");
+        return NULL;
+    }
+    const char* p = compressed_posting;
+#define DECODE(num) do { \
+    int size; \
+    num = decompress_num(p, &size); \
+    p += size; \
+} while (0)
+    o_doc_id_t doc_id;
+    DECODE(doc_id);
+    posting->doc_id = doc_id;
+
+    int offset_size;
+    DECODE(offset_size);
+    posting->offset_size = offset_size;
+    int* offset = (int*)malloc(sizeof(int) * offset_size);
+    if (offset == NULL) {
+        set_msg_of_errno(db, "Can't allocate offset");
+        return NULL;
+    }
+    posting->offset = offset;
+
+    int i;
+    for (i = 0; i < offset_size; i++) {
+        int offset;
+        DECODE(offset);
+        posting->offset[i] = offset;
+    }
+#undef DECODE
+
+    return posting;
+}
+
+static TCLIST*
+search_posting_list(oDB* db, const char* term, int term_size)
+{
+    TCLIST* compressed_posting_list = tcbdbget4(db->index, term, term_size);
+    TCLIST* posting_list = tclistnew();
+    if (compressed_posting_list == NULL) {
+        return posting_list;
+    }
+
+    int num = tclistnum(compressed_posting_list);
+    int i;
+    for (i = 0; i < num; i++) {
+        const char* compressed_posting = tclistval2(compressed_posting_list, i);
+        Posting* posting = decompress_posting(db, compressed_posting);
+        if (posting == NULL) {
+            return NULL;
+        }
+        tclistpush(posting_list, &posting, sizeof(posting));
+    }
+    tclistdel(compressed_posting_list);
+    return posting_list;
+}
+
+int
+oDB_search(oDB* db, const char* phrase)
+{
+    TCLIST* posting_lists = tclistnew();
+    size_t size = strlen(phrase);
+    unsigned int pos = 0;
+    unsigned int prev_pos = 0;
+    do {
+        int char_size = get_char_size(phrase[pos]);
+        int from = size <= pos + char_size ? prev_pos + get_char_size(phrase[prev_pos]) : pos;
+        const char* term = &phrase[from];
+        int term_size = get_term_size(term);
+        TCLIST* posting_list = search_posting_list(db, term, term_size);
+        if (posting_list == NULL) {
+            return 1;
+        }
+        tclistpush(posting_lists, &posting_list, sizeof(posting_list));
+
+        prev_pos = from;
+        pos = from + term_size;
+    } while (pos < size);
+
+    int i;
+    for (i = 0; i < tclistnum(posting_lists); i++) {
+        int sp;
+        TCLIST** p = (TCLIST**)tclistval(posting_lists, i, &sp);
+        assert(sp == sizeof(*p));
+        assert(p != NULL);
+        tclistdel(*p);
+    }
+    tclistdel(posting_lists);
 
     return 0;
 }

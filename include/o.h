@@ -22,11 +22,24 @@ typedef struct oDB oDB;
 int oDB_create(oDB* db, const char* path);
 void oDB_init(oDB* db);
 void oDB_fini(oDB* db);
+int oDB_open_to_read(oDB* db, const char* path);
 int oDB_open_to_write(oDB* db, const char* path);
 int oDB_close(oDB* db);
 int oDB_put(oDB* db, const char* doc);
+int oDB_search(oDB* db, const char* phrase);
 
 #define array_sizeof(a) (sizeof(a) / sizeof(a[0]))
+
+#if defined(__GNUC__)
+#   define TRACE(...) do { \
+    printf("%s:%d ", __FILE__, __LINE__); \
+    printf(__VA_ARGS__); \
+    printf("\n"); \
+    fflush(stdout); \
+} while (0)
+#else
+#   define TRACE
+#endif
 
 #endif
 /**

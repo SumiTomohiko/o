@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,6 +14,8 @@ usage()
     printf("usage:\n");
     printf("  o create db\n");
     printf("  o put db\n");
+    printf("  o search db phrase\n");
+    printf("  o words db\n");
 }
 
 static void
@@ -46,10 +49,20 @@ read_file(oDB* db, FILE* fp)
 }
 
 static int
+open_db_to_read(oDB* db, const char* path)
+{
+    if (oDB_open_to_read(db, path) != 0) {
+        print_error("Can't open database to read", db->msg);
+        return 1;
+    }
+    return 0;
+}
+
+static int
 open_db_to_write(oDB* db, const char* path)
 {
     if (oDB_open_to_write(db, path) != 0) {
-        print_error("Can't open database to read", db->msg);
+        print_error("Can't open database to write", db->msg);
         return 1;
     }
     return 0;
@@ -73,6 +86,26 @@ put_doc(oDB* db, const char* path, const char* doc)
     }
     if (oDB_put(db, doc) != 0) {
         print_error("Can't put document", db->msg);
+        return 1;
+    }
+    if (close_db(db) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+search(oDB* db, int argc, const char* argv[])
+{
+    if (argc < 2) {
+        usage();
+        return 1;
+    }
+    if (open_db_to_read(db, argv[0]) != 0) {
+        return 1;
+    }
+    if (oDB_search(db, argv[1]) != 0) {
+        print_error("Can't search document", db->msg);
         return 1;
     }
     if (close_db(db) != 0) {
@@ -113,6 +146,33 @@ create(oDB* db, int argc, const char* argv[])
 }
 
 static int
+words(oDB* db, int argc, const char* argv[])
+{
+    if (argc < 1) {
+        usage();
+        return 1;
+    }
+    if (open_db_to_read(db, argv[0]) != 0) {
+        return 1;
+    }
+
+    BDBCUR* cur = tcbdbcurnew(db->index);
+    tcbdbcurfirst(cur);
+    char* term;
+    while ((term = tcbdbcurkey2(cur)) != NULL) {
+        printf("%s\n", term);
+        free(term);
+        tcbdbcurnext(cur);
+    };
+    tcbdbcurdel(cur);
+
+    if (close_db(db) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
 do_cmd(oDB* db, int argc, const char* argv[])
 {
     if (argc < 1) {
@@ -128,6 +188,12 @@ do_cmd(oDB* db, int argc, const char* argv[])
     }
     if (strcmp(cmd, "put") == 0) {
         return put(db, cmd_argc, cmd_argv);
+    }
+    if (strcmp(cmd, "search") == 0) {
+        return search(db, cmd_argc, cmd_argv);
+    }
+    if (strcmp(cmd, "words") == 0) {
+        return words(db, cmd_argc, cmd_argv);
     }
     usage();
     return 1;
