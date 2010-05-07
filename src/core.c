@@ -542,7 +542,7 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
     size_t size = strlen(phrase);
     unsigned int pos = term_size;
     unsigned int prev_pos = 0;
-    do {
+    while (pos < size) {
         int char_size = get_char_size(phrase[pos]);
         int gap;
         int from;
@@ -580,7 +580,7 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
         prev_pos = from;
         pos = from + term_size;
         posting_list1 = intersected;
-    } while (pos < size);
+    }
 
     int num = tclistnum(posting_list1);
     *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * num);

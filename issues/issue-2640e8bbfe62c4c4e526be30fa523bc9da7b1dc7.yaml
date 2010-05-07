@@ -8,8 +8,8 @@ type: :bugfix
 component: core
 release: 
 reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
-status: :unstarted
-disposition: 
+status: :closed
+disposition: :fixed
 creation_time: 2010-05-06 18:24:35.989043 Z
 references: []
 
@@ -18,4 +18,8 @@ log_events:
 - - 2010-05-06 18:24:37.208747 Z
   - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
   - created
+  - ""
+- - 2010-05-07 03:44:13.435649 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - closed with disposition fixed
   - ""
