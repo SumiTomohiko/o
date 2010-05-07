@@ -1,0 +1,31 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+  <title>o Documentation - Usage</title>
+  <link rel="stylesheet" type="text/css" href="default.css"/>
+</head>
+<body>
+<div id="container">
+<p><a href="index.html">HOME</a></p>
+<h1>Usage</h1>
+<p>o provides a command line interface that name is o. You can handle a o's database with this tool.</p>
+<h2>Create a database</h2>
+<p>You can create new database by the following command.</p>
+<pre>$ o create db</pre>
+<p>The above command makes a directory of &quot;db&quot; which includes indexes.</p>
+<h2>Register a documentation</h2>
+<pre>$ o put db &lt; foo</pre>
+<p>The above command registers a documentation in the file &quot;foo&quot; to the index &quot;db&quot;. Charactor encoding of contents in documentations must be UTF-8.</p>
+<h2>Search documentations</h2>
+<p>The following command searches &quot;foo&quot; in the index &quot;db&quot;.</p>
+<pre>$ o search db foo</pre>
+<p>If documentations are found, o outputs IDs of these documentations. You can get their contents with these IDs by the &quot;get&quot; command.</p>
+<h2>Get a documentation</h2>
+<pre>$ o get db 42</pre>
+<p>The above command outputs contents of the documentation which ID is 42.</p>
+</div>
+</body>
+</html>
+<!--
+vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
+-->
