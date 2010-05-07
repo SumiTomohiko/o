@@ -16,6 +16,18 @@ shape is wheel, so this is "shaling".
 There is a mailer named Shaling
 (http://www.unixuser.org/~euske/python/shaling/), nobody will be confused.
 
+Requirements
+------------
+
+* x86
+* Ubuntu Linux 8.04
+* libz.so.1
+* libbz2.so.1.0
+* librt.so.1
+* libpthread.so.0
+* libm.so.6
+* libc.so.6
+
 Issue tracking system and known bugs
 ------------------------------------
 
