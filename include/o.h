@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "tcbdb.h"
+#include "tchdb.h"
 #include "tcutil.h"
 
 typedef int o_doc_id_t;
@@ -15,6 +16,7 @@ struct oDB {
     int lock_file;
     o_doc_id_t next_doc_id;
     TCBDB* index;
+    TCHDB* docs;
 };
 
 typedef struct oDB oDB;

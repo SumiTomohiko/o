@@ -1,0 +1,14 @@
+#!/bin/sh
+
+db="${TMPDIR}/db"
+doc="foobarbazquuxhogefugapiyo"
+
+${O} create "${db}"
+cat <<EOF | ${O} put "${TMPDIR}/db"
+${doc}
+EOF
+if [ X"`${O} get ${db} 0`" != X"${doc}" ]; then
+  exit 1
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2

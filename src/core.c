@@ -53,12 +53,26 @@ oDB_init(oDB* db)
     db->lock_file = -1;
     db->next_doc_id = 0;
     db->index = tcbdbnew();
+    db->docs = tchdbnew();
 }
 
 void
 oDB_fini(oDB* db)
 {
+    tchdbdel(db->docs);
     tcbdbdel(db->index);
+}
+
+static int
+open_docs(oDB* db, const char* path, int omode)
+{
+    char docs[1024];
+    snprintf(docs, array_sizeof(docs), "%s/docs.tch", path);
+    if (!tchdbopen(db->docs, docs, omode)) {
+        set_msg(db, "Can't open docs", tchdberrmsg(tchdbecode(db->docs)));
+        return 1;
+    }
+    return 0;
 }
 
 static int
@@ -115,6 +129,26 @@ read_doc_id(oDB* db, const char* path, o_doc_id_t* doc_id)
     return 0;
 }
 
+static int
+close_docs(oDB* db)
+{
+    if (!tchdbclose(db->docs)) {
+        set_msg(db, "Can't close docs", tchdberrmsg(tchdbecode(db->docs)));
+        return 1;
+    }
+    return 0;
+}
+
+static int
+close_index(oDB* db)
+{
+    if (!tcbdbclose(db->index)) {
+        set_msg(db, "Can't close index", tcbdberrmsg(tcbdbecode(db->index)));
+        return 1;
+    }
+    return 0;
+}
+
 int
 oDB_create(oDB* db, const char* path)
 {
@@ -125,7 +159,16 @@ oDB_create(oDB* db, const char* path)
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
         return 1;
     }
+    if (close_index(db) != 0) {
+        return 1;
+    }
     if (write_doc_id(db, path, 0) != 0) {
+        return 1;
+    }
+    if (open_docs(db, path, HDBOWRITER | HDBOCREAT) != 0) {
+        return 1;
+    }
+    if (close_docs(db) != 0) {
         return 1;
     }
     return 0;
@@ -135,11 +178,13 @@ int
 oDB_close(oDB* db)
 {
     int status = 0;
+    if (close_docs(db) != 0) {
+        status = 1;
+    }
     if (write_doc_id(db, db->path, db->next_doc_id) != 0) {
         status = 1;
     }
-    if (!tcbdbclose(db->index)) {
-        set_msg(db, "Can't close index", tcbdberrmsg(tcbdbecode(db->index)));
+    if (close_index(db) != 0) {
         status = 1;
     }
     if (close(db->lock_file) != 0) {
@@ -184,7 +229,7 @@ copy_path(oDB* db, const char* path)
 }
 
 static int
-open_db(oDB* db, const char* path, int lock_operation, int omode)
+open_db(oDB* db, const char* path, int lock_operation, int index_mode, int docs_mode)
 {
     if (copy_path(db, path) != 0) {
         return 1;
@@ -192,10 +237,13 @@ open_db(oDB* db, const char* path, int lock_operation, int omode)
     if (lock_db(db, path, lock_operation) != 0) {
         return 1;
     }
-    if (open_index(db, path, omode) != 0) {
+    if (open_index(db, path, index_mode) != 0) {
         return 1;
     }
     if (read_doc_id(db, path, &db->next_doc_id) != 0) {
+        return 1;
+    }
+    if (open_docs(db, path, docs_mode) != 0) {
         return 1;
     }
     return 0;
@@ -204,13 +252,13 @@ open_db(oDB* db, const char* path, int lock_operation, int omode)
 int
 oDB_open_to_read(oDB* db, const char* path)
 {
-    return open_db(db, path, LOCK_SH, BDBOREADER);
+    return open_db(db, path, LOCK_SH, BDBOREADER, HDBOREADER);
 }
 
 int
 oDB_open_to_write(oDB* db, const char* path)
 {
-    return open_db(db, path, LOCK_EX, BDBOWRITER);
+    return open_db(db, path, LOCK_EX, BDBOWRITER, HDBOWRITER);
 }
 
 static int
@@ -294,6 +342,8 @@ oDB_put(oDB* db, const char* doc)
         pos += get_char_size(doc[pos]);
     }
 
+    o_doc_id_t doc_id = db->next_doc_id;
+
     tcmapiterinit(term2pos);
     int key_size;
     const void* key;
@@ -303,7 +353,6 @@ oDB_put(oDB* db, const char* doc)
         assert(val != NULL);
         assert(val_size % sizeof(int) == 0);
         int pos_num = val_size / sizeof(int);
-        o_doc_id_t doc_id = db->next_doc_id;
         /**
          * 1 of (1 + pos_num) is for a document id. Each number in postings
          * needs 8 bytes at most.
@@ -318,6 +367,12 @@ oDB_put(oDB* db, const char* doc)
     }
 
     tcmapdel(term2pos);
+
+    if (!tchdbput(db->docs, &doc_id, sizeof(doc_id), doc, size)) {
+        set_msg(db, "Can't register doc", tchdberrmsg(tchdbecode(db->docs)));
+        return 1;
+    }
+
     db->next_doc_id++;
 
     return 0;

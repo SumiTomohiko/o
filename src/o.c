@@ -13,6 +13,7 @@ usage()
 {
     printf("usage:\n");
     printf("  o create db\n");
+    printf("  o get db docid\n");
     printf("  o put db\n");
     printf("  o search db phrase\n");
     printf("  o words db\n");
@@ -153,6 +154,30 @@ create(oDB* db, int argc, const char* argv[])
 }
 
 static int
+get(oDB* db, int argc, const char* argv[])
+{
+    if (argc < 2) {
+        usage();
+        return 1;
+    }
+    if (open_db_to_read(db, argv[0]) != 0) {
+        return 1;
+    }
+
+    int doc_id = atoi(argv[1]);
+    int sp;
+    char* doc = (char*)tchdbget(db->docs, &doc_id, sizeof(doc_id), &sp);
+    if (doc != NULL) {
+        printf("%s", doc);
+    }
+
+    if (close_db(db) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
 words(oDB* db, int argc, const char* argv[])
 {
     if (argc < 1) {
@@ -201,6 +226,9 @@ do_cmd(oDB* db, int argc, const char* argv[])
     }
     if (strcmp(cmd, "words") == 0) {
         return words(db, cmd_argc, cmd_argv);
+    }
+    if (strcmp(cmd, "get") == 0) {
+        return get(db, cmd_argc, cmd_argv);
     }
     usage();
     return 1;
