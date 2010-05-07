@@ -9,6 +9,6 @@ o_LDFLAGS = -lo
 lib_LTLIBRARIES = libo.la
 libo_la_SOURCES = core.c
 libo_la_CFLAGS = -Wall -Werror
-libo_la_LDFLAGS = $(TC_DIR)/libtokyocabinet.a -lz -lbz2 -lrt -lpthread -lm -lc
+libo_la_LIBADD = $(TC_DIR)/libtokyocabinet.a -lz -lbz2 -lrt -lpthread -lm -lc
 
 # vim: tabstop=8 shiftwidth=8 noexpandtab
