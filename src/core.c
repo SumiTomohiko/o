@@ -58,23 +58,23 @@ oDB_init(oDB* db)
     db->lock_file = -1;
     db->next_doc_id = 0;
     db->index = tcbdbnew();
-    db->docs = tchdbnew();
+    db->doc = tchdbnew();
 }
 
 void
 oDB_fini(oDB* db)
 {
-    tchdbdel(db->docs);
+    tchdbdel(db->doc);
     tcbdbdel(db->index);
 }
 
 static int
-open_docs(oDB* db, const char* path, int omode)
+open_doc(oDB* db, const char* path, int omode)
 {
-    char docs[1024];
-    snprintf(docs, array_sizeof(docs), "%s/docs.tch", path);
-    if (!tchdbopen(db->docs, docs, omode)) {
-        set_msg(db, "Can't open docs", tchdberrmsg(tchdbecode(db->docs)));
+    char doc[1024];
+    snprintf(doc, array_sizeof(doc), "%s/doc.tch", path);
+    if (!tchdbopen(db->doc, doc, omode)) {
+        set_msg(db, "Can't open doc", tchdberrmsg(tchdbecode(db->doc)));
         return 1;
     }
     return 0;
@@ -135,10 +135,10 @@ read_doc_id(oDB* db, const char* path, o_doc_id_t* doc_id)
 }
 
 static int
-close_docs(oDB* db)
+close_doc(oDB* db)
 {
-    if (!tchdbclose(db->docs)) {
-        set_msg(db, "Can't close docs", tchdberrmsg(tchdbecode(db->docs)));
+    if (!tchdbclose(db->doc)) {
+        set_msg(db, "Can't close doc", tchdberrmsg(tchdbecode(db->doc)));
         return 1;
     }
     return 0;
@@ -170,10 +170,10 @@ oDB_create(oDB* db, const char* path)
     if (write_doc_id(db, path, 0) != 0) {
         return 1;
     }
-    if (open_docs(db, path, HDBOWRITER | HDBOCREAT) != 0) {
+    if (open_doc(db, path, HDBOWRITER | HDBOCREAT) != 0) {
         return 1;
     }
-    if (close_docs(db) != 0) {
+    if (close_doc(db) != 0) {
         return 1;
     }
     return 0;
@@ -183,7 +183,7 @@ int
 oDB_close(oDB* db)
 {
     int status = 0;
-    if (close_docs(db) != 0) {
+    if (close_doc(db) != 0) {
         status = 1;
     }
     if (write_doc_id(db, db->path, db->next_doc_id) != 0) {
@@ -234,7 +234,7 @@ copy_path(oDB* db, const char* path)
 }
 
 static int
-open_db(oDB* db, const char* path, int lock_operation, int index_mode, int docs_mode)
+open_db(oDB* db, const char* path, int lock_operation, int index_mode, int doc_mode)
 {
     if (copy_path(db, path) != 0) {
         return 1;
@@ -248,7 +248,7 @@ open_db(oDB* db, const char* path, int lock_operation, int index_mode, int docs_
     if (read_doc_id(db, path, &db->next_doc_id) != 0) {
         return 1;
     }
-    if (open_docs(db, path, docs_mode) != 0) {
+    if (open_doc(db, path, doc_mode) != 0) {
         return 1;
     }
     return 0;
@@ -392,7 +392,7 @@ char*
 oDB_get(oDB* db, o_doc_id_t doc_id, int* size)
 {
     int sp;
-    char* compressed = (char*)tchdbget(db->docs, &doc_id, sizeof(doc_id), &sp);
+    char* compressed = (char*)tchdbget(db->doc, &doc_id, sizeof(doc_id), &sp);
     if (compressed == NULL) {
         set_msg(db, "Document not found", NULL);
         return NULL;
@@ -460,8 +460,8 @@ put_doc(oDB* db, o_doc_id_t doc_id, const char* doc, size_t size)
     if (compressed == NULL) {
         return 1;
     }
-    if (!tchdbput(db->docs, &doc_id, sizeof(doc_id), tcxstrptr(compressed), tcxstrsize(compressed))) {
-        set_msg(db, "Can't register doc", tchdberrmsg(tchdbecode(db->docs)));
+    if (!tchdbput(db->doc, &doc_id, sizeof(doc_id), tcxstrptr(compressed), tcxstrsize(compressed))) {
+        set_msg(db, "Can't register doc", tchdberrmsg(tchdbecode(db->doc)));
         return 1;
     }
     tcxstrdel(compressed);

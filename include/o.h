@@ -16,7 +16,7 @@ struct oDB {
     int lock_file;
     o_doc_id_t next_doc_id;
     TCBDB* index;
-    TCHDB* docs;
+    TCHDB* doc;
 };
 
 typedef struct oDB oDB;
