@@ -4,11 +4,14 @@ o (shaling) 0.0.1
 What is this?
 -------------
 
-o (shaling) is a full text search engine.
+o (shaling) is a full text search engine. o uses N-gram method. o handles
+Unicode (UTF-8).
 
-o is pronounced as "shaling". "shaling" is a Japanese, and means a "wheel". o's
-shape is wheel, so this is "shaling". And, o also means
-"\(^o^)/ My life is over" (see doc/google.png).
+About name
+----------
+
+o is pronounced as "shaling". "Shaling" is a Japanese, and means a "wheel". o's
+shape is wheel, so this is "shaling".
 
 There is a mailer named Shaling
 (http://www.unixuser.org/~euske/python/shaling/), nobody will be confused.
