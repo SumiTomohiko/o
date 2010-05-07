@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <zlib.h>
 #include "tcutil.h"
 #include "o.h"
 
@@ -36,6 +37,10 @@
 static void
 set_msg(oDB* db, const char* s, const char* t)
 {
+    if (t == NULL) {
+        snprintf(db->msg, array_sizeof(db->msg), "%s", s);
+        return;
+    }
     snprintf(db->msg, array_sizeof(db->msg), "%s - %s", s, t);
 }
 
@@ -329,6 +334,140 @@ encode_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_s
     *data_size = p - data;
 }
 
+static TCXSTR*
+compress_doc(oDB* db, const char* doc, size_t size)
+{
+    z_stream z;
+    z.zalloc = Z_NULL;
+    z.zfree = Z_NULL;
+    z.opaque = Z_NULL;
+    if (deflateInit(&z, Z_DEFAULT_COMPRESSION) != Z_OK) {
+        set_msg(db, "deflateInit failed", z.msg);
+        return NULL;
+    }
+    TCXSTR* compressed = tcxstrnew();
+    z.avail_in = size;
+    z.next_in = (Bytef*)doc;
+#define CONCAT  tcxstrcat(compressed, out_buf, sizeof(out_buf) - z.avail_out)
+    while (0 < z.avail_in) {
+        char out_buf[1024];
+        z.next_out = (Bytef*)out_buf;
+        z.avail_out = sizeof(out_buf);
+        if (deflate(&z, Z_NO_FLUSH) != Z_OK) {
+            deflateEnd(&z);
+            set_msg(db, "deflate failed for Z_NO_FLUSH", z.msg);
+            tcxstrdel(compressed);
+            return NULL;
+        }
+        CONCAT;
+    }
+    while (1) {
+        char out_buf[1024];
+        z.next_out = (Bytef*)out_buf;
+        z.avail_out = sizeof(out_buf);
+        int retval = deflate(&z, Z_FINISH);
+        if (retval == Z_STREAM_END) {
+            CONCAT;
+            break;
+        }
+        if (retval != Z_OK) {
+            deflateEnd(&z);
+            set_msg(db, "deflate failed for Z_FINISH", z.msg);
+            tcxstrdel(compressed);
+            return NULL;
+        }
+        CONCAT;
+    }
+#undef CONCAT
+
+    if (deflateEnd(&z) != Z_OK) {
+        set_msg(db, "deflateEnd failed", z.msg);
+        tcxstrdel(compressed);
+        return NULL;
+    }
+    return compressed;
+}
+
+char*
+oDB_get(oDB* db, o_doc_id_t doc_id, int* size)
+{
+    int sp;
+    char* compressed = (char*)tchdbget(db->docs, &doc_id, sizeof(doc_id), &sp);
+    if (compressed == NULL) {
+        set_msg(db, "Document not found", NULL);
+        return NULL;
+    }
+
+    z_stream z;
+    z.zalloc = Z_NULL;
+    z.zfree = Z_NULL;
+    z.opaque = Z_NULL;
+    z.next_in = Z_NULL;
+    z.avail_in = 0;
+    if (inflateInit(&z) != Z_OK) {
+        set_msg(db, "inflateInit failed", z.msg);
+        return NULL;
+    }
+
+    TCXSTR* doc = tcxstrnew();
+    z.avail_in = sp;
+    z.next_in = (Bytef*)compressed;
+    while (0 < z.avail_in) {
+#define CONCAT  tcxstrcat(doc, buf, sizeof(buf) - z.avail_out)
+        char buf[1024];
+        z.next_out = (Bytef*)buf;
+        z.avail_out = sizeof(buf);
+        int retval = inflate(&z, Z_NO_FLUSH);
+        if (retval == Z_STREAM_END) {
+            CONCAT;
+            break;
+        }
+        if (retval != Z_OK) {
+            set_msg(db, "inflate failed", z.msg);
+            inflateEnd(&z);
+            tcxstrdel(doc);
+            return NULL;
+        }
+        CONCAT;
+#undef CONCAT
+    }
+
+    if (inflateEnd(&z) != Z_OK) {
+        set_msg(db, "inflateEnd failed", z.msg);
+        tcxstrdel(doc);
+        return NULL;
+    }
+    free(compressed);
+
+    *size = tcxstrsize(doc) + 1;
+    char* s = (char*)malloc(*size);
+    if (s == NULL) {
+        set_msg_of_errno(db, "Can't allocate string");
+        tcxstrdel(doc);
+        return NULL;
+    }
+    memcpy(s, tcxstrptr(doc), *size - 1);
+    s[*size - 1] = '\0';
+    tcxstrdel(doc);
+
+    return s;
+}
+
+static int
+put_doc(oDB* db, o_doc_id_t doc_id, const char* doc, size_t size)
+{
+    TCXSTR* compressed = compress_doc(db, doc, size);
+    if (compressed == NULL) {
+        return 1;
+    }
+    if (!tchdbput(db->docs, &doc_id, sizeof(doc_id), tcxstrptr(compressed), tcxstrsize(compressed))) {
+        set_msg(db, "Can't register doc", tchdberrmsg(tchdbecode(db->docs)));
+        return 1;
+    }
+    tcxstrdel(compressed);
+    return 0;
+}
+
 int
 oDB_put(oDB* db, const char* doc)
 {
@@ -368,8 +507,7 @@ oDB_put(oDB* db, const char* doc)
 
     tcmapdel(term2pos);
 
-    if (!tchdbput(db->docs, &doc_id, sizeof(doc_id), doc, size)) {
-        set_msg(db, "Can't register doc", tchdberrmsg(tchdbecode(db->docs)));
+    if (put_doc(db, doc_id, doc, size) != 0) {
         return 1;
     }
 

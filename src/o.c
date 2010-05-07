@@ -164,12 +164,15 @@ get(oDB* db, int argc, const char* argv[])
         return 1;
     }
 
-    int doc_id = atoi(argv[1]);
-    int sp;
-    char* doc = (char*)tchdbget(db->docs, &doc_id, sizeof(doc_id), &sp);
-    if (doc != NULL) {
-        printf("%s", doc);
+    int size;
+    char* doc = oDB_get(db, atoi(argv[1]), &size);
+    if (doc == NULL) {
+        print_error("Can't get document", db->msg);
+        close_db(db);
+        return 1;
     }
+    printf("%s", doc);
+    free(doc);
 
     if (close_db(db) != 0) {
         return 1;

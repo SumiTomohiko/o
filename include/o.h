@@ -28,6 +28,7 @@ int oDB_open_to_read(oDB* db, const char* path);
 int oDB_open_to_write(oDB* db, const char* path);
 int oDB_close(oDB* db);
 int oDB_put(oDB* db, const char* doc);
+char* oDB_get(oDB* db, o_doc_id_t doc_id, int* size);
 int oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size);
 
 #define array_sizeof(a) (sizeof(a) / sizeof(a[0]))
