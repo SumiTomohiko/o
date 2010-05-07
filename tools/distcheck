@@ -1,0 +1,35 @@
+#!/bin/sh
+
+cleanup()
+{
+  rm -rf "${archive}"
+  if [ $? != 0 ]; then
+    echo "can't cleanup"
+    exit 2
+  fi
+}
+
+do_test()
+{
+  (cd "${archive}" && mkdir $$ && ./configure --prefix=`pwd`/$$ && make && make install)
+  if [ $? != 0 ]; then
+    echo "can't make"
+    exit 2
+  fi
+}
+
+archive="${1}"
+if [ -z "${archive}" ]; then
+  echo "${0} head"
+  exit 1
+fi
+
+cleanup
+zcat "${archive}.tar.gz" | cpio -i
+if [ $? != 0 ]; then
+  echo "can't extrace ${archive}.tar.gz"
+  exit 2
+fi
+do_test
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
