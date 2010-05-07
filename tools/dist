@@ -1,0 +1,61 @@
+#!/bin/sh
+
+print_done()
+{
+  echo "done"
+}
+
+archive="${1}"
+if [ -z "${archive}" ]; then
+  echo "${0} head"
+  exit 1
+fi
+
+dir="$$"
+archive_dir="${dir}/${archive}"
+
+echo -n "Extract source tree..."
+mkdir "${dir}"
+if [ $? != 0 ]; then
+  echo "can't make temporary directory"
+  exit 2
+fi
+git archive "--prefix=${archive_dir}/" HEAD | tar xf -
+if [ $? != 0 ]; then
+  echo "can't extract source tree"
+  exit 2
+fi
+mkdir -p "${archive_dir}/include/o"
+if [ $? != 0 ]; then
+  echo "can't mkdir"
+  exit 2
+fi
+print_done
+
+echo -n "Generate configure etc..."
+(cd "${archive_dir}" && ./autogen.sh)
+if [ $? != 0 ]; then
+  echo "can't generate configure etc."
+  exit 2
+fi
+rm -rf "${archive_dir}/autom4te.cache"
+if [ $? != 0 ]; then
+  echo "can't remove autom4te"
+  exit 2
+fi
+
+echo -n "Archive .tar.gz..."
+(cd "${dir}" && tar czf "../${archive}.tar.gz" "${archive}")
+if [ $? != 0 ]; then
+  echo "can't archive .tar.gz"
+  exit 2
+fi
+print_done
+
+rm -rf "${dir}"
+if [ $? != 0 ]; then
+  echo "can't cleanup temporary directory"
+  exit 2
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
