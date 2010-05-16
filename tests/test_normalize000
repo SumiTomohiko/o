@@ -1,0 +1,13 @@
+#!/bin/sh
+
+db="${TMPDIR}/db"
+${O} create "${db}"
+cat <<EOF | ${O} put "${db}"
+車
+輪
+EOF
+if [ X"`${O} search "${db}" 車輪`" != X"0" ]; then
+  exit 1
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
