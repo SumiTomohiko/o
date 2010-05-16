@@ -1,0 +1,18 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Ignore Zenkaku spaces.
+desc: ""
+type: :task
+component: core
+release: 
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-16 17:59:46.672794 Z
+references: []
+
+id: 64e6f79ec4813babefec6a7f738e3bdc0dc3777e
+log_events: 
+- - 2010-05-16 17:59:48.448613 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""

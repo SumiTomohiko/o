@@ -1,0 +1,18 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Normalize hankaku katakana to zenkaku katakana
+desc: ""
+type: :task
+component: core
+release: 
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-16 18:00:42.247517 Z
+references: []
+
+id: cef66de71ef637d106ec9520ffad32e4e0df7d88
+log_events: 
+- - 2010-05-16 18:00:42.704444 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
