@@ -1,0 +1,18 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Searching phrase must be normalized.
+desc: ""
+type: :task
+component: core
+release: 
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-16 17:44:28.294743 Z
+references: []
+
+id: 00be9a8ac1adbc20b0d163a10ec6400f811b448f
+log_events: 
+- - 2010-05-16 17:44:29.248000 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
