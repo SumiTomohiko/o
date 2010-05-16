@@ -1,4 +1,6 @@
+#include <alloca.h>
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -24,10 +26,10 @@
     int i; \
     for (i = 0; i < num; i++) { \
         Posting* posting = *((Posting**)tclistval2((list), i)); \
-        printf("<%d:", posting->doc_id); \
+        printf("<%d:%d", posting->doc_id, posting->offset[0]); \
         int j; \
-        for (j = 0; j < posting->offset_size; j++) { \
-            printf("%d", posting->offset[j]); \
+        for (j = 1; j < posting->offset_size; j++) { \
+            printf(",%d", posting->offset[j]); \
         } \
         printf(">"); \
     } \
@@ -468,8 +470,8 @@ put_doc(oDB* db, o_doc_id_t doc_id, const char* doc, size_t size)
     return 0;
 }
 
-int
-oDB_put(oDB* db, const char* doc)
+static int
+put_normalized_doc(oDB* db, const char* doc)
 {
     TCMAP* term2pos = tcmapnew();
     size_t size = strlen(doc);
@@ -514,6 +516,44 @@ oDB_put(oDB* db, const char* doc)
     db->next_doc_id++;
 
     return 0;
+}
+
+static void
+normalize_doc(char* dest, const char* src)
+{
+    typedef int BOOL;
+#define TRUE    (42 == 42)
+#define FALSE   (!TRUE)
+    BOOL is_prev_alpha = FALSE;
+    char* last = dest - 1;
+    char* p = dest;
+    const char* q;
+    for (q = src; *q != '\0'; q++) {
+        char c = *q;
+        if (isspace(c)) {
+            if (is_prev_alpha) {
+                *p = ' ';
+                p++;
+            }
+            is_prev_alpha = FALSE;
+            continue;
+        }
+        *p = c;
+        is_prev_alpha = isalpha(c) ? TRUE : FALSE;
+        last = p;
+        p++;
+    }
+    *(last + 1) = '\0';
+#undef FALSE
+#undef TRUE
+}
+
+int
+oDB_put(oDB* db, const char* doc)
+{
+    char* normalized = (char*)alloca(strlen(doc) + 1);
+    normalize_doc(normalized, doc);
+    return put_normalized_doc(db, normalized);
 }
 
 struct Posting {
@@ -734,24 +774,22 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
 
     size_t size = strlen(phrase);
     unsigned int pos = term_size;
+    int gap = 0;
     unsigned int prev_pos = 0;
     while (pos < size) {
         int char_size = get_char_size(phrase[pos]);
-        int gap;
         int from;
-        const char* term;
-        int term_size;
         if (size <= pos + char_size) {
-            gap = get_char_size(phrase[prev_pos]);
-            from = prev_pos + gap;
-            term = &phrase[from];
-            term_size = get_term_size(term);
+            int prev_char_size = get_char_size(phrase[prev_pos]);
+            gap += prev_char_size;
+            from = prev_pos + prev_char_size;
         }
         else {
+            gap += get_term_size(&phrase[prev_pos]);
             from = pos;
-            term = &phrase[from];
-            gap = term_size = get_term_size(term);
         }
+        const char* term = &phrase[from];
+        int term_size = get_term_size(term);
         TCLIST* posting_list2 = search_posting_list(db, term, term_size);
         if (posting_list2 == NULL) {
             tclistdel(posting_list1);
