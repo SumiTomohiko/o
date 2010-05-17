@@ -320,19 +320,19 @@ static void
 encode_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
 {
     char* p = data;
-#define ENCODE(num) do { \
+#define COMPRESS(num) do { \
     int size; \
     compress_num((num), p, &size); \
     p += size; \
 } while (0)
-    ENCODE(doc_id);
-    ENCODE(pos_num);
+    COMPRESS(doc_id);
+    COMPRESS(pos_num);
 
     int i;
     for (i = 0; i < pos_num; i++) {
-        ENCODE(pos[i]);
+        COMPRESS(pos[i]);
     }
-#undef ENCODE
+#undef COMPRESS
     *data_size = p - data;
 }
 
@@ -622,17 +622,17 @@ decompress_posting(oDB* db, const char* compressed_posting)
         return NULL;
     }
     const char* p = compressed_posting;
-#define DECODE(num) do { \
+#define DECOMPRESS(num) do { \
     int size; \
     num = decompress_num(p, &size); \
     p += size; \
 } while (0)
     o_doc_id_t doc_id;
-    DECODE(doc_id);
+    DECOMPRESS(doc_id);
     posting->doc_id = doc_id;
 
     int offset_size;
-    DECODE(offset_size);
+    DECOMPRESS(offset_size);
     posting->offset_size = offset_size;
     int* offset = (int*)malloc(sizeof(int) * offset_size);
     if (offset == NULL) {
@@ -644,10 +644,10 @@ decompress_posting(oDB* db, const char* compressed_posting)
     int i;
     for (i = 0; i < offset_size; i++) {
         int offset;
-        DECODE(offset);
+        DECOMPRESS(offset);
         posting->offset[i] = offset;
     }
-#undef DECODE
+#undef DECOMPRESS
 
     return posting;
 }
