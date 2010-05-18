@@ -3,7 +3,7 @@ title: Searching phrase must be normalized.
 desc: ""
 type: :task
 component: core
-release: 
+release: 0.0.2
 reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
 status: :unstarted
 disposition: 
@@ -15,4 +15,8 @@ log_events:
 - - 2010-05-16 17:44:29.248000 Z
   - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
   - created
+  - ""
+- - 2010-05-18 23:22:55.188011 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - assigned to release 0.0.2 from unassigned
   - ""
