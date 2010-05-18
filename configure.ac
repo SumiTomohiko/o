@@ -10,6 +10,7 @@ AC_CONFIG_HEADERS([include/o/config.h])
 # Checks for programs.
 AC_PROG_CC
 AC_PROG_LIBTOOL
+AC_PROG_YACC  # unused but autoconf requests this declaration.
 
 # Checks for libraries.
 

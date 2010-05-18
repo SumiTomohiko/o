@@ -24,6 +24,8 @@ missing
 src/Makefile
 src/Makefile.in
 src/o
+src/parser.c
+src/parser.out
 tokyocabinet/Makefile
 tokyocabinet/config.log
 tokyocabinet/config.status
