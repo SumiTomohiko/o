@@ -16,25 +16,7 @@
 #include "tcutil.h"
 #include "o.h"
 
-/**
- * -Werror option stops compile if unused functions found. So I implement this
- * as a macro.
- */
-#define DUMP_POSTING_LIST(list) do { \
-    printf("%s:%u <", __FILE__, __LINE__); \
-    int num = tclistnum((list)); \
-    int i; \
-    for (i = 0; i < num; i++) { \
-        Posting* posting = *((Posting**)tclistval2((list), i)); \
-        printf("<%d:%d", posting->doc_id, posting->offset[0]); \
-        int j; \
-        for (j = 1; j < posting->offset_size; j++) { \
-            printf(",%d", posting->offset[j]); \
-        } \
-        printf(">"); \
-    } \
-    printf(">\n"); \
-} while (0)
+#define BIGRAM_SIZE 2
 
 static void
 set_msg(oDB* db, const char* s, const char* t)
@@ -317,7 +299,7 @@ compress_num(int n, char* p, int* size)
 }
 
 static void
-encode_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
+compress_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
 {
     char* p = data;
 #define COMPRESS(num) do { \
@@ -470,17 +452,21 @@ put_doc(oDB* db, o_doc_id_t doc_id, const char* doc, size_t size)
     return 0;
 }
 
+typedef int offset_t;
+
 static int
 put_normalized_doc(oDB* db, const char* doc)
 {
     TCMAP* term2pos = tcmapnew();
     size_t size = strlen(doc);
     unsigned int pos = 0;
+    offset_t offset = 0;
     while (pos < size) {
         const char* pc = &doc[pos];
         int term_size = get_term_size(pc);
-        tcmapputcat(term2pos, pc, term_size, &pos, sizeof(pos));
+        tcmapputcat(term2pos, pc, term_size, &offset, sizeof(offset));
         pos += get_char_size(doc[pos]);
+        offset++;
     }
 
     o_doc_id_t doc_id = db->next_doc_id;
@@ -500,7 +486,7 @@ put_normalized_doc(oDB* db, const char* doc)
          */
         char data[(1 + pos_num) * 8];
         int data_size;
-        encode_posting(doc_id, (int*)val, pos_num, data, &data_size);
+        compress_posting(doc_id, (int*)val, pos_num, data, &data_size);
         if (!tcbdbputdup(db->index, key, key_size, data, data_size)) {
             set_msg(db, "Can't register any term", tcbdberrmsg(tcbdbecode(db->index)));
             return 1;
@@ -559,11 +545,31 @@ oDB_put(oDB* db, const char* doc)
 struct Posting {
     o_doc_id_t doc_id;
     int term_size;
-    int* offset;
+    offset_t* offset;
     int offset_size;
 };
 
 typedef struct Posting Posting;
+
+/**
+ * -Werror option stops compile if unused functions found. So I implement this
+ * as a macro.
+ */
+#define DUMP_POSTING_LIST(list) do { \
+    printf("%s:%u <", __FILE__, __LINE__); \
+    int num = tclistnum((list)); \
+    int i; \
+    for (i = 0; i < num; i++) { \
+        Posting* posting = *((Posting**)tclistval2((list), i)); \
+        printf("<%d:%d", posting->doc_id, posting->offset[0]); \
+        int j; \
+        for (j = 1; j < posting->offset_size; j++) { \
+            printf(",%d", posting->offset[j]); \
+        } \
+        printf(">"); \
+    } \
+    printf(">\n"); \
+} while (0)
 
 static int
 decompress_num(const char* p, int* size)
@@ -604,7 +610,7 @@ Posting_of_offset_size(oDB* db, int offset_size)
     if (posting == NULL) {
         return NULL;
     }
-    int* offset = (int*)malloc(sizeof(int) * offset_size);
+    offset_t* offset = (offset_t*)malloc(sizeof(offset_t) * offset_size);
     if (offset == NULL) {
         set_msg_of_errno(db, "malloc failed");
         return NULL;
@@ -634,7 +640,7 @@ decompress_posting(oDB* db, const char* compressed_posting)
     int offset_size;
     DECOMPRESS(offset_size);
     posting->offset_size = offset_size;
-    int* offset = (int*)malloc(sizeof(int) * offset_size);
+    offset_t* offset = (offset_t*)malloc(sizeof(offset_t) * offset_size);
     if (offset == NULL) {
         set_msg_of_errno(db, "Can't allocate offset");
         return NULL;
@@ -643,7 +649,7 @@ decompress_posting(oDB* db, const char* compressed_posting)
 
     int i;
     for (i = 0; i < offset_size; i++) {
-        int offset;
+        offset_t offset;
         DECOMPRESS(offset);
         posting->offset[i] = offset;
     }
@@ -669,7 +675,7 @@ search_posting_list(oDB* db, const char* term, int term_size)
         if (posting == NULL) {
             return NULL;
         }
-        posting->term_size = term_size;
+        posting->term_size = BIGRAM_SIZE;
         tclistpush(posting_list, &posting, sizeof(posting));
     }
     tclistdel(compressed_posting_list);
@@ -708,17 +714,17 @@ intersect(oDB* db, TCLIST* posting_list1, TCLIST* posting_list2, int gap)
         }
 
         int offset_size_min = posting1->offset_size < posting2->offset_size ? posting1->offset_size : posting2->offset_size;
-        int offset[offset_size_min];
+        offset_t offset[offset_size_min];
         int offset_size = 0;
         int k = 0;
         int l = 0;
         while ((k < posting1->offset_size) && (l < posting2->offset_size)) {
-            int offset_end = posting1->offset[k] + gap;
-            if (offset_end < posting2->offset[l]) {
+            int end_offset = posting1->offset[k] + gap;
+            if (end_offset < posting2->offset[l]) {
                 k++;
                 continue;
             }
-            if (posting2->offset[l] < offset_end) {
+            if (posting2->offset[l] < end_offset) {
                 l++;
                 continue;
             }
@@ -780,12 +786,11 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
         int char_size = get_char_size(phrase[pos]);
         int from;
         if (size <= pos + char_size) {
-            int prev_char_size = get_char_size(phrase[prev_pos]);
-            gap += prev_char_size;
-            from = prev_pos + prev_char_size;
+            gap += 1;
+            from = prev_pos + get_char_size(phrase[prev_pos]);
         }
         else {
-            gap += get_term_size(&phrase[prev_pos]);
+            gap += 2;
             from = pos;
         }
         const char* term = &phrase[from];
