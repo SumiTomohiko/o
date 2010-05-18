@@ -3,9 +3,9 @@
 db="${TMPDIR}/db"
 ${O} create "${db}"
 cat <<EOF | ${O} put "${db}"
-中村珠緒がプリキュアを脱退した。
+foobarbazquuxhogefugapiyo
 EOF
-if [ X"`${O} search "${db}" "モーニング娘を脱退?"`" != X"" ]; then
+if [ X"`${O} search "${db}" "foo not baz"`" != X"" ]; then
   exit 1
 fi
 

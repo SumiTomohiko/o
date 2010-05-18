@@ -5,7 +5,7 @@ ${O} create "${db}"
 cat <<EOF | ${O} put "${db}"
 中村珠緒がモーニング娘。を脱退した。
 EOF
-if [ X"`${O} search --fuzzy "${db}" モーニング娘を脱退`" != X"0" ]; then
+if [ X"`${O} search "${db}" "モーニング娘を脱退?"`" != X"0" ]; then
   exit 1
 fi
 
