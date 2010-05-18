@@ -51,3 +51,6 @@ tokyocabinet/tcucodec
 tokyocabinet/tcumttest
 tokyocabinet/tcutest
 tokyocabinet/tokyocabinet.pc
+tools/lemon/Makefile
+tools/lemon/Makefile.in
+tools/lemon/lemon

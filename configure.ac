@@ -20,7 +20,8 @@ AC_PROG_LIBTOOL
 # Checks for library functions.
 
 AC_CONFIG_FILES([Makefile
-                 src/Makefile])
+                 src/Makefile
+                 tools/lemon/Makefile])
 AC_CONFIG_SUBDIRS([tokyocabinet])
 AC_OUTPUT
 

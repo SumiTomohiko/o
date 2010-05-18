@@ -1,5 +1,5 @@
 
-SUBDIRS = tokyocabinet src
+SUBDIRS = tokyocabinet tools/lemon src
 
 install:
 	cd src && $(MAKE) install
