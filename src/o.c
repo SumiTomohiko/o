@@ -115,8 +115,8 @@ search(oDB* db, int argc, char* argv[])
     if (open_db_to_read(db, path) != 0) {
         return 1;
     }
-    o_doc_id_t* doc_ids;
-    int size;
+    o_doc_id_t* doc_ids = NULL;
+    int size = 0;
     const char* phrase = argv[optind + 1];
     if (!fuzzy) {
         if (oDB_search(db, phrase, &doc_ids, &size) != 0) {

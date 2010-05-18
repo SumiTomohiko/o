@@ -934,8 +934,6 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
 int
 oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
 {
-    *doc_ids = NULL;
-
     int term_size = get_term_size(phrase);
     TCLIST* posting_list1 = search_posting_list(db, phrase, term_size);
     if (posting_list1 == NULL) {
