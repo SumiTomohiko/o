@@ -35,10 +35,12 @@ This project uses ditz (http://ditz.rubyforge.org/) as an issues management
 system. You can see issues and known bugs at
 http://neko-daisuki.ddo.jp/~SumiTomohiko/o/issues/.
 
-What the author wants
----------------------
+Development plans and progress
+------------------------------
 
-* ambiguity search
+by 0.0.2
+~~~~~~~~
+* fuzzy search
 * boolean search (ex. foo AND bar OR baz)
 
 Other full text search engines
