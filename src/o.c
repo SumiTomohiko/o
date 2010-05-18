@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <getopt.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,6 +8,7 @@
 #include <string.h>
 #include "tcutil.h"
 #include "o.h"
+#include "o/private.h"
 
 static void
 usage()
@@ -15,7 +17,7 @@ usage()
     printf("  o create db\n");
     printf("  o get db docid\n");
     printf("  o put db\n");
-    printf("  o search db phrase\n");
+    printf("  o search [--fuzzy] db phrase\n");
     printf("  o words db\n");
 }
 
@@ -96,19 +98,34 @@ put_doc(oDB* db, const char* path, const char* doc)
 }
 
 static int
-search(oDB* db, int argc, const char* argv[])
+search(oDB* db, int argc, char* argv[])
 {
+    int optind = 0;
+    BOOL fuzzy = FALSE;
+    if (strcmp(argv[0], "--fuzzy") == 0) {
+        fuzzy = TRUE;
+        optind++;
+    }
     if (argc < 2) {
         usage();
         return 1;
     }
-    if (open_db_to_read(db, argv[0]) != 0) {
+
+    const char* path = argv[optind];
+    if (open_db_to_read(db, path) != 0) {
         return 1;
     }
     o_doc_id_t* doc_ids;
     int size;
-    if (oDB_search(db, argv[1], &doc_ids, &size) != 0) {
-        print_error("Can't search document", db->msg);
+    const char* phrase = argv[optind + 1];
+    if (!fuzzy) {
+        if (oDB_search(db, phrase, &doc_ids, &size) != 0) {
+            print_error("Can't search document", db->msg);
+            return 1;
+        }
+    }
+    else if (oDB_search_fuzzily(db, phrase, &doc_ids, &size) != 0) {
+        print_error("Can't search document fuzzily", db->msg);
         return 1;
     }
     if (close_db(db) != 0) {
@@ -123,7 +140,7 @@ search(oDB* db, int argc, const char* argv[])
 }
 
 static int
-put(oDB* db, int argc, const char* argv[])
+put(oDB* db, int argc, char* argv[])
 {
     if (argc < 1) {
         usage();
@@ -140,7 +157,7 @@ put(oDB* db, int argc, const char* argv[])
 }
 
 static int
-create(oDB* db, int argc, const char* argv[])
+create(oDB* db, int argc, char* argv[])
 {
     if (argc < 1) {
         usage();
@@ -154,7 +171,7 @@ create(oDB* db, int argc, const char* argv[])
 }
 
 static int
-get(oDB* db, int argc, const char* argv[])
+get(oDB* db, int argc, char* argv[])
 {
     if (argc < 2) {
         usage();
@@ -181,7 +198,7 @@ get(oDB* db, int argc, const char* argv[])
 }
 
 static int
-words(oDB* db, int argc, const char* argv[])
+words(oDB* db, int argc, char* argv[])
 {
     if (argc < 1) {
         usage();
@@ -208,7 +225,7 @@ words(oDB* db, int argc, const char* argv[])
 }
 
 static int
-do_cmd(oDB* db, int argc, const char* argv[])
+do_cmd(oDB* db, int argc, char* argv[])
 {
     if (argc < 1) {
         usage();
@@ -217,7 +234,7 @@ do_cmd(oDB* db, int argc, const char* argv[])
 
     const char* cmd = argv[0];
     int cmd_argc = argc - 1;
-    const char** cmd_argv = argv + 1;
+    char** cmd_argv = argv + 1;
     if (strcmp(cmd, "create") == 0) {
         return create(db, cmd_argc, cmd_argv);
     }
@@ -238,7 +255,7 @@ do_cmd(oDB* db, int argc, const char* argv[])
 }
 
 int
-main(int argc, const char* argv[])
+main(int argc, char* argv[])
 {
     oDB db;
     oDB_init(&db);

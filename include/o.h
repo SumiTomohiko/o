@@ -30,19 +30,7 @@ int oDB_close(oDB* db);
 int oDB_put(oDB* db, const char* doc);
 char* oDB_get(oDB* db, o_doc_id_t doc_id, int* size);
 int oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size);
-
-#define array_sizeof(a) (sizeof(a) / sizeof(a[0]))
-
-#if defined(__GNUC__)
-#   define TRACE(...) do { \
-    printf("%s:%d ", __FILE__, __LINE__); \
-    printf(__VA_ARGS__); \
-    printf("\n"); \
-    fflush(stdout); \
-} while (0)
-#else
-#   define TRACE
-#endif
+int oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size);
 
 #endif
 /**

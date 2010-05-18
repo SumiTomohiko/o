@@ -15,6 +15,7 @@
 #include <zlib.h>
 #include "tcutil.h"
 #include "o.h"
+#include "o/private.h"
 
 #define BIGRAM_SIZE 2
 
@@ -507,9 +508,6 @@ put_normalized_doc(oDB* db, const char* doc)
 static void
 normalize_doc(char* dest, const char* src)
 {
-    typedef int BOOL;
-#define TRUE    (42 == 42)
-#define FALSE   (!TRUE)
     BOOL is_prev_alpha = FALSE;
     char* last = dest - 1;
     char* p = dest;
@@ -530,8 +528,6 @@ normalize_doc(char* dest, const char* src)
         p++;
     }
     *(last + 1) = '\0';
-#undef FALSE
-#undef TRUE
 }
 
 int
@@ -762,6 +758,177 @@ delete_posting_list(oDB* db, TCLIST* posting_list)
         Posting_delete(db, posting);
     }
     tclistdel(posting_list);
+}
+
+static unsigned int
+count_chars(const char* s)
+{
+    unsigned int n = 0;
+    const char* pc = s;
+    while (*pc != '\0') {
+        pc += get_char_size(*pc);
+        n++;
+    };
+    return n;
+}
+
+int
+oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
+{
+    struct FuzzyHit {
+        unsigned int offsets_size;
+        offset_t offsets[1];
+    };
+    typedef struct FuzzyHit FuzzyHit;
+
+    int phrase_size = count_chars(phrase);
+    int terms_num = phrase_size - 1;
+    TCMAP* doc2hits = tcmapnew();
+    unsigned int pos = 0;
+    unsigned int i;
+    for (i = 0; i < terms_num; i++) {
+        const char* term = &phrase[pos];
+        int term_size = get_term_size(term);
+        TCLIST* posting_list = search_posting_list(db, term, term_size);
+        int doc_num = tclistnum(posting_list);
+        int i;
+        for (i = 0; i < doc_num; i++) {
+            Posting* posting = *((Posting**)tclistval2(posting_list, i));
+            int sp;
+            o_doc_id_t doc_id = posting->doc_id;
+            TCLIST** phits = (TCLIST**)tcmapget(doc2hits, &doc_id, sizeof(doc_id), &sp);
+            if (phits == NULL) {
+                TCLIST* list = tclistnew();
+                int i;
+                for (i = 0; i < posting->offset_size; i++) {
+                    FuzzyHit* hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
+                    if (hit == NULL) {
+                        set_msg_of_errno(db, "malloc failed");
+                        return 1;
+                    }
+                    hit->offsets_size = 1;
+                    hit->offsets[0] = posting->offset[i];
+                    tclistpush(list, &hit, sizeof(hit));
+                }
+                tcmapput(doc2hits, &doc_id, sizeof(doc_id), &list, sizeof(list));
+                continue;
+            }
+            TCLIST* hits = *phits;
+            int hits_num = tclistnum(hits);
+            TCLIST* new_hits = tclistnew();
+            int i = 0;
+            int j = 0;
+            while ((i < hits_num) && (j < posting->offset_size)) {
+                FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, i));
+                if (posting->offset[j] < hit->offsets[0]) {
+                    FuzzyHit* new_hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
+                    if (new_hit == NULL) {
+                        set_msg_of_errno(db, "malloc failed");
+                        return 1;
+                    }
+                    new_hit->offsets_size = 1;
+                    new_hit->offsets[0] = posting->offset[j];
+                    tclistpush(new_hits, &new_hit, sizeof(new_hit));
+                    j++;
+                    continue;
+                }
+                if (i < hits_num - 1) {
+                    FuzzyHit* next_hit = *((FuzzyHit**)tclistval2(hits, i + 1));
+                    if (next_hit->offsets[next_hit->offsets_size - 1] < posting->offset[j]) {
+                        i++;
+                        continue;
+                    }
+                }
+                if (phrase_size / 2 < BIGRAM_SIZE + hit->offsets[hit->offsets_size - 1] - posting->offset[j]) {
+                    FuzzyHit* new_hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
+                    if (new_hit == NULL) {
+                        set_msg_of_errno(db, "malloc failed");
+                        return 1;
+                    }
+                    new_hit->offsets_size = 1;
+                    new_hit->offsets[0] = posting->offset[j];
+                    tclistpush(new_hits, &new_hit, sizeof(new_hit));
+                    i++;
+                    continue;
+                }
+                hit->offsets[hit->offsets_size] = posting->offset[j];
+                hit->offsets_size++;
+                i++;
+                j++;
+            }
+            int k;
+            for (k = 0; k < tclistnum(new_hits); k++) {
+                FuzzyHit* new_hit = *((FuzzyHit**)tclistval2(new_hits, k));
+                int l;
+                for (l = 0; l < tclistnum(hits) - 1; l++) {
+                    FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, l));
+                    if (new_hit->offsets[0] < hit->offsets[0]) {
+                        break;
+                    }
+                }
+                tclistinsert(hits, l, &new_hit, sizeof(new_hit));
+            }
+        }
+        delete_posting_list(db, posting_list);
+        pos += term_size;
+    }
+
+    tcmapiterinit(doc2hits);
+    int n = 0;
+    int sp;
+    o_doc_id_t* key;
+    while ((key = (o_doc_id_t*)tcmapiternext(doc2hits, &sp)) != NULL) {
+        const TCLIST* hits = *((const TCLIST**)tcmapget(doc2hits, key, sizeof(key), &sp));
+        BOOL flag = FALSE;
+        int i;
+        for (i = 0; i < tclistnum(hits); i++) {
+            FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, i));
+            if (terms_num / 2 <= hit->offsets_size) {
+                flag = TRUE;
+                break;
+            }
+        }
+        if (!flag) {
+            continue;
+        }
+        n++;
+    }
+    *doc_ids_size = n;
+    *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * n);
+    int m = 0;
+    tcmapiterinit(doc2hits);
+    while ((key = (o_doc_id_t*)tcmapiternext(doc2hits, &sp)) != NULL) {
+        const TCLIST* hits = *((const TCLIST**)tcmapget(doc2hits, key, sizeof(key), &sp));
+        int i;
+        for (i = 0; i < tclistnum(hits); i++) {
+            FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, i));
+            if (terms_num / 2 <= hit->offsets_size) {
+                (*doc_ids)[m] = *key;
+                m++;
+                break;
+            }
+        }
+    }
+
+#if 0
+    tcmapiterinit(doc2hits);
+    while ((key = (o_doc_id_t*)tcmapiternext(doc2hits, &sp)) != NULL) {
+        TRACE("docid=%d", *key);
+        const TCLIST* hits = *((const TCLIST**)tcmapget(doc2hits, key, sizeof(key), &sp));
+        int i;
+        for (i = 0; i < tclistnum(hits); i++) {
+            TRACE("hit #%d", i);
+            FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, i));
+            int j;
+            for (j = 0; j < hit->offsets_size; j++) {
+                TRACE("offset[%d]=%d", j, hit->offsets[j]);
+            }
+        }
+    }
+#endif
+
+    tcmapdel(doc2hits);
+    return 0;
 }
 
 int
