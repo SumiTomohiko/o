@@ -16,6 +16,7 @@ core
 depcomp
 include/o/config.h
 include/o/config.h.in
+include/o/parser.h
 include/o/stamp-h1
 install-sh
 libtool

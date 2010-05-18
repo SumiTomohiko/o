@@ -3996,7 +3996,8 @@ struct lemon *lemp;
 
   if( lemp->tokenprefix ) prefix = lemp->tokenprefix;
   else                    prefix = "";
-  in = file_open(lemp,".h","rb");
+  const char* path = "../include/o/parser.h";
+  in = fopen(path, "rb");
   if( in ){
     for(i=1; i<lemp->nterminal && fgets(line,LINESIZE,in); i++){
       sprintf(pattern,"#define %s%-30s %2d\n",prefix,lemp->symbols[i]->name,i);
@@ -4008,7 +4009,7 @@ struct lemon *lemp;
       return;
     }
   }
-  out = file_open(lemp,".h","wb");
+  out = fopen(path, "wb");
   if( out ){
     for(i=1; i<lemp->nterminal; i++){
       fprintf(out,"#define %s%-30s %2d\n",prefix,lemp->symbols[i]->name,i);
