@@ -1,0 +1,18 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Normalize zenkaku alphabets etc to hankaku
+desc: alphabets (ABC...abc...) and marks ([]()<>+*...)
+type: :task
+component: core
+release: 
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-18 15:54:28.726736 Z
+references: []
+
+id: 56bde53d71f9d1c3a93f9d79ce779668c2009fba
+log_events: 
+- - 2010-05-18 15:54:30.277315 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
