@@ -1,0 +1,18 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: Syntax error causes segmentation fault
+desc: o search 'AND AND'
+type: :bugfix
+component: core
+release: 0.0.2
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-19 13:08:22.106082 Z
+references: []
+
+id: 6332ab9b32a224e64bbdc6f790d2e07afb599eb1
+log_events: 
+- - 2010-05-19 13:08:23.553861 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
