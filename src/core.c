@@ -785,6 +785,12 @@ oHits_new(oDB* db, int num)
     return hits;
 }
 
+void
+oHits_delete(oDB* db, oHits* hits)
+{
+    free(hits);
+}
+
 static int
 search_fuzzily(oDB* db, const char* phrase, oHits** phits)
 {
@@ -955,7 +961,8 @@ search_phrase(oDB* db, const char* phrase, oHits** phits)
         return 1;
     }
     if (tclistnum(posting_list1) == 0) {
-        return 0;
+        *phits = oHits_new(db, 0);
+        return *phits != NULL ? 0 : 1;
     }
 
     size_t size = strlen(phrase);
@@ -1015,38 +1022,82 @@ search_phrase(oDB* db, const char* phrase, oHits** phits)
 }
 
 static int
+not_op(oDB* db, oHits* left, oHits* right, oHits** phits)
+{
+    return 1;
+}
+
+static int
+and_op(oDB* db, oHits* left, oHits* right, oHits** phits)
+{
+    int max_num = left->num < right->num ? right->num : left->num;
+    *phits = oHits_new(db, max_num);
+    (*phits)->num = 0;
+
+    TCMAP* map = tcmapnew();
+    int val = 1;
+    int i;
+    for (i = 0; i < left->num; i++) {
+        o_doc_id_t doc_id = left->doc_id[i];
+        tcmapput(map, &doc_id, sizeof(doc_id), &val, sizeof(val));
+    }
+    for (i = 0; i < right->num; i++) {
+        o_doc_id_t doc_id = right->doc_id[i];
+        int sp;
+        const void* val = tcmapget(map, &doc_id, sizeof(doc_id), &sp);
+        if (val == NULL) {
+            continue;
+        }
+        (*phits)->doc_id[(*phits)->num] = doc_id;
+        (*phits)->num++;
+    }
+    tcmapdel(map);
+
+    return 0;
+}
+
+static int
+or_op(oDB* db, oHits* left, oHits* right, oHits** phits)
+{
+    return 1;
+}
+
+static int
 eval(oDB* db, oNode* node, oHits** phits)
 {
-    const char* phrase;
-    oHits* hits_left;
-    oHits* hits_right;
+    if ((node->type == NODE_PHRASE) || (node->type == NODE_FUZZY)) {
+        const char* phrase = tcxstrptr(node->u.phrase.s);
+        int (*f)(oDB*, const char*, oHits**) = node->type == NODE_PHRASE ? search_phrase : search_fuzzily;
+        return f(db, phrase, phits);
+    }
+    oHits* left_hits = NULL;
+    if (eval(db, node->u.logical_op.left, &left_hits) != 0) {
+        return 1;
+    }
+    oHits* right_hits = NULL;
+    if (eval(db, node->u.logical_op.right, &right_hits) != 0) {
+        return 1;
+    }
+    int (*f)(oDB*, oHits*, oHits*, oHits**);
     switch (node->type) {
-    case NODE_PHRASE:
-        phrase = tcxstrptr(node->u.phrase.s);
-        return search_phrase(db, phrase, phits);
-        break;
-    case NODE_FUZZY:
-        phrase = tcxstrptr(node->u.phrase.s);
-        return search_fuzzily(db, phrase, phits);
-        break;
     case NODE_AND:
-        eval(db, node->u.logical_op.left, &hits_left);
-        eval(db, node->u.logical_op.right, &hits_right);
+        f = and_op;
         break;
     case NODE_OR:
-        eval(db, node->u.logical_op.left, &hits_left);
-        eval(db, node->u.logical_op.right, &hits_right);
+        f = or_op;
         break;
     case NODE_NOT:
-        eval(db, node->u.logical_op.left, &hits_left);
-        eval(db, node->u.logical_op.right, &hits_right);
+        f = not_op;
         break;
     default:
         return 1;
         break;
     }
+    int status = f(db, left_hits, right_hits, phits);
+    oHits_delete(db, left_hits);
+    oHits_delete(db, right_hits);
 
-    return 0;
+    return status;
 }
 
 int
