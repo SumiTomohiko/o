@@ -1024,7 +1024,30 @@ search_phrase(oDB* db, const char* phrase, oHits** phits)
 static int
 not_op(oDB* db, oHits* left, oHits* right, oHits** phits)
 {
-    return 1;
+    int max_num = left->num;
+    *phits = oHits_new(db, max_num);
+    (*phits)->num = 0;
+
+    TCMAP* map = tcmapnew();
+    int val = 1;
+    int i;
+    for (i = 0; i < right->num; i++) {
+        o_doc_id_t doc_id = right->doc_id[i];
+        tcmapput(map, &doc_id, sizeof(doc_id), &val, sizeof(val));
+    }
+    for (i = 0; i < left->num; i++) {
+        o_doc_id_t doc_id = left->doc_id[i];
+        int sp;
+        const void* val = tcmapget(map, &doc_id, sizeof(doc_id), &sp);
+        if (val != NULL) {
+            continue;
+        }
+        (*phits)->doc_id[(*phits)->num] = doc_id;
+        (*phits)->num++;
+    }
+    tcmapdel(map);
+
+    return 0;
 }
 
 static int
