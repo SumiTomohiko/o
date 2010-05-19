@@ -1059,7 +1059,32 @@ and_op(oDB* db, oHits* left, oHits* right, oHits** phits)
 static int
 or_op(oDB* db, oHits* left, oHits* right, oHits** phits)
 {
-    return 1;
+    int max_num = left->num + right->num;
+    *phits = oHits_new(db, max_num);
+    (*phits)->num = 0;
+
+    TCMAP* map = tcmapnew();
+    int val = 1;
+    int i;
+    for (i = 0; i < left->num; i++) {
+        o_doc_id_t doc_id = left->doc_id[i];
+        tcmapput(map, &doc_id, sizeof(doc_id), &val, sizeof(val));
+    }
+    for (i = 0; i < right->num; i++) {
+        o_doc_id_t doc_id = right->doc_id[i];
+        tcmapput(map, &doc_id, sizeof(doc_id), &val, sizeof(val));
+    }
+    tcmapiterinit(map);
+    const void* key;
+    int sp;
+    while ((key = tcmapiternext(map, &sp)) != NULL) {
+        o_doc_id_t doc_id = *((o_doc_id_t*)key);
+        (*phits)->doc_id[(*phits)->num] = doc_id;
+        (*phits)->num++;
+    }
+    tcmapdel(map);
+
+    return 0;
 }
 
 static int
