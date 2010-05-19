@@ -8,7 +8,8 @@ EOF
 cat <<EOF | ${O} put "${db}"
 hogefugapiyo
 EOF
-if [ X"`${O} search "${db}" "foo or hoge"` | sort" != X"0\n1" ]; then
+if [ X"`${O} search "${db}" "foo or hoge" | sort`" != X"0
+1" ]; then
   exit 1
 fi
 
