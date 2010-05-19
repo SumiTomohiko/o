@@ -119,10 +119,16 @@ search(oDB* db, int argc, char* argv[])
     int size = 0;
     const char* phrase = argv[optind + 1];
     if (!fuzzy) {
-        if (oDB_search(db, phrase, &doc_ids, &size) != 0) {
+        oHits* hits = NULL;
+        if (oDB_search(db, phrase, &hits) != 0) {
             print_error("Can't search document", db->msg);
             return 1;
         }
+        int i;
+        for (i = 0; i < hits->num; i++) {
+            printf("%d\n", hits->doc_id[i]);
+        }
+        return 0;
     }
     else if (oDB_search_fuzzily(db, phrase, &doc_ids, &size) != 0) {
         print_error("Can't search document fuzzily", db->msg);

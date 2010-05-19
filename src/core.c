@@ -931,11 +931,12 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
     return 0;
 }
 
-int
-oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
+static int
+search_phrase(oDB* db, TCXSTR* phrase, oHits** hits)
 {
-    int term_size = get_term_size(phrase);
-    TCLIST* posting_list1 = search_posting_list(db, phrase, term_size);
+    const char* s_phrase = tcxstrptr(phrase);
+    int term_size = get_term_size(s_phrase);
+    TCLIST* posting_list1 = search_posting_list(db, s_phrase, term_size);
     if (posting_list1 == NULL) {
         return 1;
     }
@@ -943,22 +944,22 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
         return 0;
     }
 
-    size_t size = strlen(phrase);
+    size_t size = tcxstrsize(phrase);
     unsigned int pos = term_size;
     int gap = 0;
     unsigned int prev_pos = 0;
     while (pos < size) {
-        int char_size = get_char_size(phrase[pos]);
+        int char_size = get_char_size(s_phrase[pos]);
         int from;
         if (size <= pos + char_size) {
             gap += 1;
-            from = prev_pos + get_char_size(phrase[prev_pos]);
+            from = prev_pos + get_char_size(s_phrase[prev_pos]);
         }
         else {
             gap += 2;
             from = pos;
         }
-        const char* term = &phrase[from];
+        const char* term = &s_phrase[from];
         int term_size = get_term_size(term);
         TCLIST* posting_list2 = search_posting_list(db, term, term_size);
         if (posting_list2 == NULL) {
@@ -984,21 +985,59 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
     }
 
     int num = tclistnum(posting_list1);
-    *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * num);
-    if (*doc_ids == NULL) {
+    *hits = (oHits*)malloc(sizeof(oHits) + sizeof(o_doc_id_t) * (num - 1));
+    if (*hits == NULL) {
         oDB_set_msg_of_errno(db, "malloc failed");
         delete_posting_list(db, posting_list1);
         return 1;
     }
+    (*hits)->num = num;
     int i;
     for (i = 0; i < num; i++) {
         Posting* posting = *((Posting**)tclistval2(posting_list1, i));
-        (*doc_ids)[i] = posting->doc_id;
+        (*hits)->doc_id[i] = posting->doc_id;
     }
-    *doc_ids_size = num;
 
     delete_posting_list(db, posting_list1);
     return 0;
+}
+
+static int
+eval(oDB* db, oNode* node, oHits** hits)
+{
+    oHits* hits_left;
+    oHits* hits_right;
+    switch (node->type) {
+    case NODE_PHRASE:
+        return search_phrase(db, node->u.phrase.s, hits);
+        break;
+    case NODE_FUZZY:
+        break;
+    case NODE_AND:
+        eval(db, node->u.binop.left, &hits_left);
+        eval(db, node->u.binop.right, &hits_right);
+        break;
+    case NODE_OR:
+        eval(db, node->u.binop.left, &hits_left);
+        eval(db, node->u.binop.right, &hits_right);
+        break;
+    case NODE_NOT:
+        eval(db, node->u.binop.left, &hits_left);
+        eval(db, node->u.binop.right, &hits_right);
+        break;
+    default:
+        return 1;
+        break;
+    }
+
+    return 0;
+}
+
+int
+oDB_search(oDB* db, const char* phrase, oHits** hits)
+{
+    oNode* node = oParser_parse(db, phrase);
+    return eval(db, node, hits);
 }
 
 /**

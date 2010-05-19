@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "tcutil.h"
+#include "o.h"
 
 enum oNodeType {
     NODE_PHRASE,
@@ -48,6 +49,8 @@ typedef struct oNode oNode;
 typedef int BOOL;
 #define TRUE    (42 == 42)
 #define FALSE   (!TRUE)
+
+oNode* oParser_parse(oDB* db, const char* cond);
 
 #endif
 /**

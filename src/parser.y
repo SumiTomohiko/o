@@ -4,6 +4,7 @@
     Token_delete(arg->db, $$.token);
 }
 %token_type { Symbol }
+%token_prefix TOKEN_
 %include {
 #include <assert.h>
 #include <ctype.h>
@@ -13,6 +14,7 @@
 #include <string.h>
 #include "tcutil.h"
 #include "o.h"
+#include "o/parser.h"
 #include "o/private.h"
 
 struct Arg {
@@ -34,20 +36,8 @@ oNode_new(oDB* db, oNodeType type)
     return node;
 }
 
-enum TokenType {
-    TOKEN_PHRASE,
-    TOKEN_QUESTION,
-    TOKEN_AND,
-    TOKEN_OR,
-    TOKEN_NOT,
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-};
-
-typedef enum TokenType TokenType;
-
 struct Token {
-    TokenType type;
+    int type;
     union {
         TCXSTR* phrase;
     } u;
@@ -56,7 +46,7 @@ struct Token {
 typedef struct Token Token;
 
 static Token*
-Token_new(oDB* db, TokenType type)
+Token_new(oDB* db, int type)
 {
     Token* token = (Token*)malloc(sizeof(Token));
     if (token == NULL) {
@@ -101,7 +91,7 @@ create_and_node(oDB* db, oNode* left, oNode* right)
 }
 
 cond ::= expr(A). {
-     *arg->node = A.node;
+    *(arg->node) = A.node;
 }
 expr(A) ::= or_expr(B). {
     A = B;
@@ -186,18 +176,21 @@ Lexer_next_token(oDB* db, Lexer* lexer, Token** token)
         }
         break;
     case '(':
-        *token = Token_new(db, TOKEN_LPAREN);
+        *token = Token_new(db, TOKEN_LPAR);
         break;
     case ')':
-        *token = Token_new(db, TOKEN_RPAREN);
+        *token = Token_new(db, TOKEN_RPAR);
         break;
     case '?':
         *token = Token_new(db, TOKEN_QUESTION);
         break;
+    case '\0':
+        return FALSE;
+        break;
     default:
         {
             TCXSTR* buf = tcxstrnew();
-            while (isspace(LEXER_NEXT_CHAR(lexer))) {
+            while ((LEXER_NEXT_CHAR(lexer) != '\0') && !isspace(LEXER_NEXT_CHAR(lexer))) {
                 char c = LEXER_NEXT_CHAR(lexer);
                 tcxstrcat(buf, &c, sizeof(c));
                 lexer->pos++;
@@ -237,6 +230,7 @@ oParser_parse(oDB* db, const char* cond)
     while (Lexer_next_token(db, &lexer, &symbol.token)) {
         Parse(parser, symbol.token->type, symbol, &arg);
     }
+    symbol.token = NULL;
     Parse(parser, 0, symbol, &arg);
     ParseFree(parser, free);
 
