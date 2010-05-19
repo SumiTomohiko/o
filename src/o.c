@@ -100,48 +100,31 @@ put_doc(oDB* db, const char* path, const char* doc)
 static int
 search(oDB* db, int argc, char* argv[])
 {
-    int optind = 0;
-    BOOL fuzzy = FALSE;
-    if (strcmp(argv[0], "--fuzzy") == 0) {
-        fuzzy = TRUE;
-        optind++;
-    }
     if (argc < 2) {
         usage();
         return 1;
     }
 
+    int optind = 0;
     const char* path = argv[optind];
     if (open_db_to_read(db, path) != 0) {
         return 1;
     }
-    o_doc_id_t* doc_ids = NULL;
-    int size = 0;
     const char* phrase = argv[optind + 1];
-    if (!fuzzy) {
-        oHits* hits = NULL;
-        if (oDB_search(db, phrase, &hits) != 0) {
-            print_error("Can't search document", db->msg);
-            return 1;
-        }
-        int i;
-        for (i = 0; i < hits->num; i++) {
-            printf("%d\n", hits->doc_id[i]);
-        }
-        return 0;
-    }
-    else if (oDB_search_fuzzily(db, phrase, &doc_ids, &size) != 0) {
-        print_error("Can't search document fuzzily", db->msg);
+    oHits* hits = NULL;
+    if (oDB_search(db, phrase, &hits) != 0) {
+        print_error("Can't search document", db->msg);
         return 1;
     }
     if (close_db(db) != 0) {
         return 1;
     }
+
     int i;
-    for (i = 0; i < size; i++) {
-        printf("%d\n", doc_ids[i]);
+    for (i = 0; i < hits->num; i++) {
+        printf("%d\n", hits->doc_id[i]);
     }
-    free(doc_ids);
+    free(hits);
     return 0;
 }
 

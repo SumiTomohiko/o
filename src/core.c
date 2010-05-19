@@ -772,8 +772,21 @@ count_chars(const char* s)
     return n;
 }
 
-int
-oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
+static oHits*
+oHits_new(oDB* db, int num)
+{
+    size_t size = sizeof(oHits) + sizeof(o_doc_id_t) * (num - 1);
+    oHits* hits = (oHits*)malloc(size);
+    if (hits == NULL) {
+        oDB_set_msg_of_errno(db, "oHits allocation failed");
+        return NULL;
+    }
+    hits->num = num;
+    return hits;
+}
+
+static int
+search_fuzzily(oDB* db, const char* phrase, oHits** phits)
 {
     struct FuzzyHit {
         unsigned int offsets_size;
@@ -796,8 +809,8 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
             Posting* posting = *((Posting**)tclistval2(posting_list, i));
             int sp;
             o_doc_id_t doc_id = posting->doc_id;
-            TCLIST** phits = (TCLIST**)tcmapget(doc2hits, &doc_id, sizeof(doc_id), &sp);
-            if (phits == NULL) {
+            TCLIST** p = (TCLIST**)tcmapget(doc2hits, &doc_id, sizeof(doc_id), &sp);
+            if (p == NULL) {
                 TCLIST* list = tclistnew();
                 int i;
                 for (i = 0; i < posting->offset_size; i++) {
@@ -813,7 +826,7 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
                 tcmapput(doc2hits, &doc_id, sizeof(doc_id), &list, sizeof(list));
                 continue;
             }
-            TCLIST* hits = *phits;
+            TCLIST* hits = *p;
             int hits_num = tclistnum(hits);
             TCLIST* new_hits = tclistnew();
             int i = 0;
@@ -893,8 +906,10 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
         }
         n++;
     }
-    *doc_ids_size = n;
-    *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * n);
+    *phits = oHits_new(db, n);
+    if (*phits == NULL) {
+        return 1;
+    }
     int m = 0;
     tcmapiterinit(doc2hits);
     while ((key = (o_doc_id_t*)tcmapiternext(doc2hits, &sp)) != NULL) {
@@ -903,7 +918,7 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
         for (i = 0; i < tclistnum(hits); i++) {
             FuzzyHit* hit = *((FuzzyHit**)tclistval2(hits, i));
             if (terms_num / 2 <= hit->offsets_size) {
-                (*doc_ids)[m] = *key;
+                (*phits)->doc_id[m] = *key;
                 m++;
                 break;
             }
@@ -932,11 +947,10 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
 }
 
 static int
-search_phrase(oDB* db, TCXSTR* phrase, oHits** hits)
+search_phrase(oDB* db, const char* phrase, oHits** phits)
 {
-    const char* s_phrase = tcxstrptr(phrase);
-    int term_size = get_term_size(s_phrase);
-    TCLIST* posting_list1 = search_posting_list(db, s_phrase, term_size);
+    int term_size = get_term_size(phrase);
+    TCLIST* posting_list1 = search_posting_list(db, phrase, term_size);
     if (posting_list1 == NULL) {
         return 1;
     }
@@ -944,22 +958,22 @@ search_phrase(oDB* db, TCXSTR* phrase, oHits** hits)
         return 0;
     }
 
-    size_t size = tcxstrsize(phrase);
+    size_t size = strlen(phrase);
     unsigned int pos = term_size;
     int gap = 0;
     unsigned int prev_pos = 0;
     while (pos < size) {
-        int char_size = get_char_size(s_phrase[pos]);
+        int char_size = get_char_size(phrase[pos]);
         int from;
         if (size <= pos + char_size) {
             gap += 1;
-            from = prev_pos + get_char_size(s_phrase[prev_pos]);
+            from = prev_pos + get_char_size(phrase[prev_pos]);
         }
         else {
             gap += 2;
             from = pos;
         }
-        const char* term = &s_phrase[from];
+        const char* term = &phrase[from];
         int term_size = get_term_size(term);
         TCLIST* posting_list2 = search_posting_list(db, term, term_size);
         if (posting_list2 == NULL) {
@@ -985,17 +999,15 @@ search_phrase(oDB* db, TCXSTR* phrase, oHits** hits)
     }
 
     int num = tclistnum(posting_list1);
-    *hits = (oHits*)malloc(sizeof(oHits) + sizeof(o_doc_id_t) * (num - 1));
-    if (*hits == NULL) {
-        oDB_set_msg_of_errno(db, "malloc failed");
+    *phits = oHits_new(db, tclistnum(posting_list1));
+    if (*phits == NULL) {
         delete_posting_list(db, posting_list1);
         return 1;
     }
-    (*hits)->num = num;
     int i;
     for (i = 0; i < num; i++) {
         Posting* posting = *((Posting**)tclistval2(posting_list1, i));
-        (*hits)->doc_id[i] = posting->doc_id;
+        (*phits)->doc_id[i] = posting->doc_id;
     }
 
     delete_posting_list(db, posting_list1);
@@ -1003,27 +1015,31 @@ search_phrase(oDB* db, TCXSTR* phrase, oHits** hits)
 }
 
 static int
-eval(oDB* db, oNode* node, oHits** hits)
+eval(oDB* db, oNode* node, oHits** phits)
 {
+    const char* phrase;
     oHits* hits_left;
     oHits* hits_right;
     switch (node->type) {
     case NODE_PHRASE:
-        return search_phrase(db, node->u.phrase.s, hits);
+        phrase = tcxstrptr(node->u.phrase.s);
+        return search_phrase(db, phrase, phits);
         break;
     case NODE_FUZZY:
+        phrase = tcxstrptr(node->u.phrase.s);
+        return search_fuzzily(db, phrase, phits);
         break;
     case NODE_AND:
-        eval(db, node->u.binop.left, &hits_left);
-        eval(db, node->u.binop.right, &hits_right);
+        eval(db, node->u.logical_op.left, &hits_left);
+        eval(db, node->u.logical_op.right, &hits_right);
         break;
     case NODE_OR:
-        eval(db, node->u.binop.left, &hits_left);
-        eval(db, node->u.binop.right, &hits_right);
+        eval(db, node->u.logical_op.left, &hits_left);
+        eval(db, node->u.logical_op.right, &hits_right);
         break;
     case NODE_NOT:
-        eval(db, node->u.binop.left, &hits_left);
-        eval(db, node->u.binop.right, &hits_right);
+        eval(db, node->u.logical_op.left, &hits_left);
+        eval(db, node->u.logical_op.right, &hits_right);
         break;
     default:
         return 1;
@@ -1034,10 +1050,10 @@ eval(oDB* db, oNode* node, oHits** hits)
 }
 
 int
-oDB_search(oDB* db, const char* phrase, oHits** hits)
+oDB_search(oDB* db, const char* phrase, oHits** phits)
 {
     oNode* node = oParser_parse(db, phrase);
-    return eval(db, node, hits);
+    return eval(db, node, phits);
 }
 
 /**

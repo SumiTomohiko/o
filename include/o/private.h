@@ -27,7 +27,7 @@ struct oNode {
         struct {
             struct oNode* left;
             struct oNode* right;
-        } binop;
+        } logical_op;
     } u;
 };
 

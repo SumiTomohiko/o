@@ -75,18 +75,18 @@ union Symbol {
 typedef union Symbol Symbol;
 
 static oNode*
-create_binop_node(oDB* db, oNodeType type, oNode* left, oNode* right)
+create_logical_op_node(oDB* db, oNodeType type, oNode* left, oNode* right)
 {
     oNode* node = oNode_new(db, type);
-    node->u.binop.left = left;
-    node->u.binop.right = right;
+    node->u.logical_op.left = left;
+    node->u.logical_op.right = right;
     return node;
 }
 
 static oNode*
 create_and_node(oDB* db, oNode* left, oNode* right)
 {
-    return create_binop_node(db, NODE_AND, left, right);
+    return create_logical_op_node(db, NODE_AND, left, right);
 }
 }
 
@@ -100,7 +100,7 @@ or_expr(A) ::= and_expr(B). {
     A = B;
 }
 or_expr(A) ::= or_expr(B) OR and_expr(C). {
-    A.node = create_binop_node(arg->db, NODE_OR, B.node, C.node);
+    A.node = create_logical_op_node(arg->db, NODE_OR, B.node, C.node);
 }
 and_expr(A) ::= not_expr(B). {
     A = B;
@@ -112,7 +112,7 @@ not_expr(A) ::= phrases(B). {
     A = B;
 }
 not_expr(A) ::= not_expr(B) NOT fuzzy_expr(C). {
-    A.node = create_binop_node(arg->db, NODE_NOT, B.node, C.node);
+    A.node = create_logical_op_node(arg->db, NODE_NOT, B.node, C.node);
 }
 phrases(A) ::= fuzzy_expr(B). {
     A = B;
@@ -176,12 +176,15 @@ Lexer_next_token(oDB* db, Lexer* lexer, Token** token)
         }
         break;
     case '(':
+        lexer->pos++;
         *token = Token_new(db, TOKEN_LPAR);
         break;
     case ')':
+        lexer->pos++;
         *token = Token_new(db, TOKEN_RPAR);
         break;
     case '?':
+        lexer->pos++;
         *token = Token_new(db, TOKEN_QUESTION);
         break;
     case '\0':
@@ -190,8 +193,11 @@ Lexer_next_token(oDB* db, Lexer* lexer, Token** token)
     default:
         {
             TCXSTR* buf = tcxstrnew();
-            while ((LEXER_NEXT_CHAR(lexer) != '\0') && !isspace(LEXER_NEXT_CHAR(lexer))) {
+            while (1) {
                 char c = LEXER_NEXT_CHAR(lexer);
+                if ((c == '\0') || (c == '(') || (c == ')') || (c == '?') || isspace(c)) {
+                    break;
+                }
                 tcxstrcat(buf, &c, sizeof(c));
                 lexer->pos++;
             }
@@ -227,6 +233,9 @@ oParser_parse(oDB* db, const char* cond)
     Symbol symbol;
     oNode* node = NULL;
     Arg arg = { db, &node };
+#if 0
+    ParseTrace(stdout, "parser: ");
+#endif
     while (Lexer_next_token(db, &lexer, &symbol.token)) {
         Parse(parser, symbol.token->type, symbol, &arg);
     }
