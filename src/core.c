@@ -29,10 +29,10 @@ set_msg(oDB* db, const char* s, const char* t)
     snprintf(db->msg, array_sizeof(db->msg), "%s - %s", s, t);
 }
 
-static void
-set_msg_of_errno(oDB* db, const char* s)
+void
+oDB_set_msg_of_errno(oDB* db, const char* msg)
 {
-    set_msg(db, s, strerror(errno));
+    set_msg(db, msg, strerror(errno));
 }
 
 void
@@ -84,7 +84,7 @@ open_doc_id(oDB* db, const char* path, const char* mode)
     snprintf(filename, array_sizeof(filename), "%s/doc_id", path);
     FILE* fp = fopen(filename, mode);
     if (fp == NULL) {
-        set_msg_of_errno(db, "Can't open doc_id");
+        oDB_set_msg_of_errno(db, "Can't open doc_id");
     }
     return fp;
 }
@@ -98,7 +98,7 @@ write_doc_id(oDB* db, const char* path, o_doc_id_t doc_id)
     }
     fwrite(&doc_id, sizeof(doc_id), 1, fp);
     if (fclose(fp) != 0) {
-        set_msg_of_errno(db, "Can't close doc_id");
+        oDB_set_msg_of_errno(db, "Can't close doc_id");
         return 1;
     }
     return 0;
@@ -113,7 +113,7 @@ read_doc_id(oDB* db, const char* path, o_doc_id_t* doc_id)
     }
     fread(doc_id, sizeof(*doc_id), 1, fp);
     if (fclose(fp) != 0) {
-        set_msg_of_errno(db, "Can't close doc_id");
+        oDB_set_msg_of_errno(db, "Can't close doc_id");
         return 1;
     }
     return 0;
@@ -143,7 +143,7 @@ int
 oDB_create(oDB* db, const char* path)
 {
     if (mkdir(path, 0755) != 0) {
-        set_msg_of_errno(db, "mkdir failed");
+        oDB_set_msg_of_errno(db, "mkdir failed");
         return 1;
     }
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
@@ -178,7 +178,7 @@ oDB_close(oDB* db)
         status = 1;
     }
     if (close(db->lock_file) != 0) {
-        set_msg_of_errno(db, "close failed");
+        oDB_set_msg_of_errno(db, "close failed");
         status = 1;
     }
     free(db->path);
@@ -192,11 +192,11 @@ lock_db(oDB* db, const char* path, int operation)
     snprintf(lock_file, array_sizeof(lock_file), "%s/lock", path);
     int fd = open(lock_file, O_RDONLY | O_CREAT, 0644);
     if (fd == -1) {
-        set_msg_of_errno(db, "open failed");
+        oDB_set_msg_of_errno(db, "open failed");
         return 1;
     }
     if (flock(fd, operation) != 0) {
-        set_msg_of_errno(db, "flock failed");
+        oDB_set_msg_of_errno(db, "flock failed");
         close(fd);
         return 1;
     }
@@ -210,7 +210,7 @@ copy_path(oDB* db, const char* path)
     size_t size = strlen(path);
     char* s = (char*)malloc(size + 1);
     if (s == NULL) {
-        set_msg_of_errno(db, "malloc failed");
+        oDB_set_msg_of_errno(db, "malloc failed");
         return 1;
     }
     strcpy(s, path);
@@ -427,7 +427,7 @@ oDB_get(oDB* db, o_doc_id_t doc_id, int* size)
     *size = tcxstrsize(doc) + 1;
     char* s = (char*)malloc(*size);
     if (s == NULL) {
-        set_msg_of_errno(db, "Can't allocate string");
+        oDB_set_msg_of_errno(db, "Can't allocate string");
         tcxstrdel(doc);
         return NULL;
     }
@@ -589,7 +589,7 @@ Posting_new(oDB* db)
 {
     Posting* posting = (Posting*)malloc(sizeof(Posting));
     if (posting == NULL) {
-        set_msg_of_errno(db, "Can't allocate memory");
+        oDB_set_msg_of_errno(db, "Can't allocate memory");
         return NULL;
     }
     posting->doc_id = 0;
@@ -608,7 +608,7 @@ Posting_of_offset_size(oDB* db, int offset_size)
     }
     offset_t* offset = (offset_t*)malloc(sizeof(offset_t) * offset_size);
     if (offset == NULL) {
-        set_msg_of_errno(db, "malloc failed");
+        oDB_set_msg_of_errno(db, "malloc failed");
         return NULL;
     }
     posting->offset = offset;
@@ -638,7 +638,7 @@ decompress_posting(oDB* db, const char* compressed_posting)
     posting->offset_size = offset_size;
     offset_t* offset = (offset_t*)malloc(sizeof(offset_t) * offset_size);
     if (offset == NULL) {
-        set_msg_of_errno(db, "Can't allocate offset");
+        oDB_set_msg_of_errno(db, "Can't allocate offset");
         return NULL;
     }
     posting->offset = offset;
@@ -803,7 +803,7 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
                 for (i = 0; i < posting->offset_size; i++) {
                     FuzzyHit* hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
                     if (hit == NULL) {
-                        set_msg_of_errno(db, "malloc failed");
+                        oDB_set_msg_of_errno(db, "malloc failed");
                         return 1;
                     }
                     hit->offsets_size = 1;
@@ -823,7 +823,7 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
                 if (posting->offset[j] < hit->offsets[0]) {
                     FuzzyHit* new_hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
                     if (new_hit == NULL) {
-                        set_msg_of_errno(db, "malloc failed");
+                        oDB_set_msg_of_errno(db, "malloc failed");
                         return 1;
                     }
                     new_hit->offsets_size = 1;
@@ -842,7 +842,7 @@ oDB_search_fuzzily(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_i
                 if (phrase_size / 2 < BIGRAM_SIZE + hit->offsets[hit->offsets_size - 1] - posting->offset[j]) {
                     FuzzyHit* new_hit = (FuzzyHit*)malloc(sizeof(FuzzyHit) + (terms_num - 1) * sizeof(offset_t));
                     if (new_hit == NULL) {
-                        set_msg_of_errno(db, "malloc failed");
+                        oDB_set_msg_of_errno(db, "malloc failed");
                         return 1;
                     }
                     new_hit->offsets_size = 1;
@@ -986,7 +986,7 @@ oDB_search(oDB* db, const char* phrase, o_doc_id_t** doc_ids, int* doc_ids_size)
     int num = tclistnum(posting_list1);
     *doc_ids = (o_doc_id_t*)malloc(sizeof(o_doc_id_t) * num);
     if (*doc_ids == NULL) {
-        set_msg_of_errno(db, "malloc failed");
+        oDB_set_msg_of_errno(db, "malloc failed");
         delete_posting_list(db, posting_list1);
         return 1;
     }
