@@ -1,7 +1,36 @@
 #if !defined(O_PRIVATE_INCLUDED)
 #define O_PRIVATE_INCLUDED
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include "tcutil.h"
+
+enum oNodeType {
+    NODE_PHRASE,
+    NODE_FUZZY,
+    NODE_AND,
+    NODE_OR,
+    NODE_NOT,
+};
+
+typedef enum oNodeType oNodeType;
+
+struct oNode {
+    oNodeType type;
+    union {
+        struct {
+            TCXSTR* s;
+        } phrase;
+        struct {
+            struct oNode* left;
+            struct oNode* right;
+        } binop;
+    } u;
+};
+
+typedef struct oNode oNode;
 
 #define array_sizeof(a) (sizeof(a) / sizeof(a[0]))
 

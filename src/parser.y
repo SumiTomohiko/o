@@ -1,43 +1,39 @@
 
+%extra_argument { Arg* arg }
+%token_destructor {
+    Token_delete(arg->db, $$.token);
+}
+%token_type { Symbol }
 %include {
 #include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include "tcutil.h"
 #include "o.h"
 #include "o/private.h"
+
+struct Arg {
+    oDB* db;
+    oNode** node;
+};
+
+typedef struct Arg Arg;
+
+static oNode*
+oNode_new(oDB* db, oNodeType type)
+{
+    oNode* node = (oNode*)malloc(sizeof(oNode));
+    if (node == NULL) {
+        oDB_set_msg_of_errno(db, "Memory allocation failed");
+        return NULL;
+    }
+    node->type = type;
+    return node;
 }
 
-cond ::= expr. {
-}
-expr ::= or_expr. {
-}
-or_expr ::= and_expr. {
-}
-or_expr ::= or_expr OR and_expr. {
-}
-and_expr ::= not_expr. {
-}
-and_expr ::= and_expr AND not_expr. {
-}
-not_expr ::= phrases. {
-}
-not_expr ::= not_expr NOT fuzzy_expr. {
-}
-phrases ::= fuzzy_expr. {
-}
-phrases ::= phrases fuzzy_expr. {
-}
-fuzzy_expr ::= atom. {
-}
-fuzzy_expr ::= PHRASE QUESTION. {
-}
-atom ::= PHRASE. {
-}
-atom ::= LPAR expr RPAR. {
-}
-
-%code {
 enum TokenType {
     TOKEN_PHRASE,
     TOKEN_QUESTION,
@@ -52,7 +48,9 @@ typedef enum TokenType TokenType;
 
 struct Token {
     TokenType type;
-    TCXSTR* phrase;
+    union {
+        TCXSTR* phrase;
+    } u;
 };
 
 typedef struct Token Token;
@@ -66,21 +64,88 @@ Token_new(oDB* db, TokenType type)
         return NULL;
     }
     token->type = type;
-    token->phrase = NULL;
+    token->u.phrase = NULL;
     return token;
 }
 
-#if 0
 static void
 Token_delete(oDB* db, Token* token)
 {
-    if (token->phrase != NULL) {
-        tcxstrdel(token->phrase);
+    if (token->u.phrase != NULL) {
+        tcxstrdel(token->u.phrase);
     }
     free(token);
 }
-#endif
 
+union Symbol {
+    Token* token;
+    oNode* node;
+};
+
+typedef union Symbol Symbol;
+
+static oNode*
+create_binop_node(oDB* db, oNodeType type, oNode* left, oNode* right)
+{
+    oNode* node = oNode_new(db, type);
+    node->u.binop.left = left;
+    node->u.binop.right = right;
+    return node;
+}
+
+static oNode*
+create_and_node(oDB* db, oNode* left, oNode* right)
+{
+    return create_binop_node(db, NODE_AND, left, right);
+}
+}
+
+cond ::= expr(A). {
+     *arg->node = A.node;
+}
+expr(A) ::= or_expr(B). {
+    A = B;
+}
+or_expr(A) ::= and_expr(B). {
+    A = B;
+}
+or_expr(A) ::= or_expr(B) OR and_expr(C). {
+    A.node = create_binop_node(arg->db, NODE_OR, B.node, C.node);
+}
+and_expr(A) ::= not_expr(B). {
+    A = B;
+}
+and_expr(A) ::= and_expr(B) AND not_expr(C). {
+    A.node = create_and_node(arg->db, B.node, C.node);
+}
+not_expr(A) ::= phrases(B). {
+    A = B;
+}
+not_expr(A) ::= not_expr(B) NOT fuzzy_expr(C). {
+    A.node = create_binop_node(arg->db, NODE_NOT, B.node, C.node);
+}
+phrases(A) ::= fuzzy_expr(B). {
+    A = B;
+}
+phrases(A) ::= phrases(B) fuzzy_expr(C). {
+    A.node = create_and_node(arg->db, B.node, C.node);
+}
+fuzzy_expr(A) ::= atom(B). {
+    A = B;
+}
+fuzzy_expr(A) ::= PHRASE(B) QUESTION. {
+    A.node = oNode_new(arg->db, NODE_FUZZY);
+    A.node->u.phrase.s = B.token->u.phrase;
+}
+atom(A) ::= PHRASE(B). {
+    A.node = oNode_new(arg->db, NODE_PHRASE);
+    A.node->u.phrase.s = B.token->u.phrase;
+}
+atom(A) ::= LPAR expr(B) RPAR. {
+    A = B;
+}
+
+%code {
 struct Lexer {
     const char* input;
     unsigned int pos;
@@ -117,7 +182,7 @@ Lexer_next_token(oDB* db, Lexer* lexer, Token** token)
                 lexer->pos++;
             }
             *token = Token_new(db, TOKEN_PHRASE);
-            (*token)->phrase = buf;
+            (*token)->u.phrase = buf;
         }
         break;
     case '(':
@@ -152,7 +217,7 @@ Lexer_next_token(oDB* db, Lexer* lexer, Token** token)
             }
             else {
                 *token = Token_new(db, TOKEN_PHRASE);
-                (*token)->phrase = buf;
+                (*token)->u.phrase = buf;
             }
         }
         break;
@@ -166,12 +231,13 @@ oParser_parse(oDB* db, const char* cond)
     yyParser* parser = ParseAlloc(malloc);
     Lexer lexer;
     Lexer_init(db, &lexer, cond);
-    Token* token = NULL;
-    while (Lexer_next_token(db, &lexer, &token)) {
-        Parse(parser, token->type, token);
-    }
+    Symbol symbol;
     oNode* node = NULL;
-    Parse(parser, 0, &node);
+    Arg arg = { db, &node };
+    while (Lexer_next_token(db, &lexer, &symbol.token)) {
+        Parse(parser, symbol.token->type, symbol, &arg);
+    }
+    Parse(parser, 0, symbol, &arg);
     ParseFree(parser, free);
 
     return node;
