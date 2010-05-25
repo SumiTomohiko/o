@@ -1,0 +1,22 @@
+--- !ditz.rubyforge.org,2008-03-06/issue 
+title: "\"foo?\" hits \"hogefugapiyo\""
+desc: Why?
+type: :task
+component: core
+release: 0.0.2
+reporter: SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+status: :unstarted
+disposition: 
+creation_time: 2010-05-25 15:43:19.003496 Z
+references: []
+
+id: 099bc7b8b824bdc882b35c0897cfa5dafdcc5c98
+log_events: 
+- - 2010-05-25 15:43:20.222013 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - created
+  - ""
+- - 2010-05-25 15:43:42.890451 Z
+  - SumiTomohiko <SumiTomohiko@neko-daisuki.ddo.jp>
+  - assigned to release 0.0.2 from unassigned
+  - ""
