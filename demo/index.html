@@ -4,11 +4,22 @@
 <title>o demo - Uncyclopedia search</title>
 </head>
 <body>
-<h1>o demo - Uncyclopedia search</h1>
-<form action="cgi-bin/search.cgi" method="post">
-  <input size="32" type="text" value="hentai"/>
-  <input type="submit" value="search"/>
-</form>
+<div align="center">
+  <h1>o demo - Uncyclopedia search</h1>
+  <form action="cgi-bin/search.cgi" method="post">
+    <table border="0" style="background-color: pink;"><tbody><tr><td>
+      <table border="0"><tbody>
+        <tr>
+          <td>
+            <input name="phrase" size="32" type="text" value="hentai"/>
+            <input name="fuzzy" type="checkbox" value="on"/> Fuzzy
+          </td>
+        </tr>
+        <tr><td align="center"><input type="submit" value="search"/></td></tr>
+      </tbody></table>
+    </td></tr></tbody></table>
+  </form>
+</div>
 </body>
 </html>
 <!--
