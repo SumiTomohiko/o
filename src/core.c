@@ -156,19 +156,43 @@ format_attrs_dir(char* s, size_t size, const char* dir)
 }
 
 static int
+create_tchdb(oDB* db, const char* path)
+{
+    TCHDB* hdb = tchdbnew();
+    if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
+        set_msg(db, "Can't create Tokyo Cabinet Hash Database", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
+    if (!tchdbclose(hdb)) {
+        set_msg(db, "Can't close Tokyo Cabinet Hash Database", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
+    tchdbdel(hdb);
+
+    return 0;
+}
+
+static int
 create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 {
     int i;
     for (i = 0; i < attrs_num; i++) {
-        TCHDB* hdb = tchdbnew();
         char path[1024];
         snprintf(path, array_sizeof(path), "%s/%s.tch", dir, attrs[i]);
-        if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
+        if (create_tchdb(db, path) != 0) {
             return 1;
         }
-        if (!tchdbclose(hdb)) {
-            return 1;
-        }
+    }
+    return 0;
+}
+
+static int
+create_attr2id(oDB* db, const char* dir)
+{
+    char path[1024];
+    snprintf(path, array_sizeof(path), "%s/attr2id.tch", dir);
+    if (create_tchdb(db, path) != 0) {
+        return 1;
     }
     return 0;
 }
@@ -185,6 +209,9 @@ oDB_create(oDB* db, const char* path, const char* attrs[], int attrs_num)
         return 1;
     }
     if (create_attrs_index(db, attrs_dir, attrs, attrs_num) != 0) {
+        return 1;
+    }
+    if (create_attr2id(db, path) != 0) {
         return 1;
     }
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
