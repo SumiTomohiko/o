@@ -148,7 +148,8 @@ put(oDB* db, int argc, char* argv[])
 static int
 create(oDB* db, int argc, char* argv[])
 {
-    const char* attrs[32];
+#define MAX_ATTRS 32
+    const char* attrs[MAX_ATTRS];
     int attrs_num = 0;
 
     struct option options[] = {
@@ -158,6 +159,10 @@ create(oDB* db, int argc, char* argv[])
     while ((opt = getopt_long(argc, argv, "", options, NULL)) != -1) {
         switch (opt) {
         case 'a':
+            if (MAX_ATTRS <= attrs_num) {
+                fprintf(stderr, "Maximum attributes number is %d", MAX_ATTRS);
+                return 1;
+            }
             attrs[attrs_num] = optarg;
             attrs_num++;
             break;
@@ -177,6 +182,7 @@ create(oDB* db, int argc, char* argv[])
         return 1;
     }
     return 0;
+#undef MAX_ATTRS
 }
 
 static int
