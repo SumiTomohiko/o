@@ -44,11 +44,17 @@ oDB_init(oDB* db)
     db->next_doc_id = 0;
     db->index = tcbdbnew();
     db->doc = tchdbnew();
+    db->attr2id = tchdbnew();
+    int i;
+    for (i = 0; i < array_sizeof(db->attrs); i++) {
+        db->attrs[i] = NULL;
+    }
 }
 
 void
 oDB_fini(oDB* db)
 {
+    tchdbdel(db->attr2id);
     tchdbdel(db->doc);
     tcbdbdel(db->index);
 }
@@ -187,13 +193,29 @@ create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 }
 
 static int
-create_attr2id(oDB* db, const char* dir)
+create_attr2id(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 {
     char path[1024];
     snprintf(path, array_sizeof(path), "%s/attr2id.tch", dir);
-    if (create_tchdb(db, path) != 0) {
+    TCHDB* hdb = tchdbnew();
+    if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
+        set_msg(db, "Can't create attr2id", tchdberrmsg(tchdbecode(hdb)));
         return 1;
     }
+    int i;
+    for (i = 0; i < attrs_num; i++) {
+        const char* attr = attrs[i];
+        if (!tchdbput(hdb, attr, strlen(attr), &i, sizeof(i))) {
+            set_msg(db, "Can't register attribute to attr2id", tchdberrmsg(tchdbecode(hdb)));
+            return 1;
+        }
+    }
+    if (!tchdbclose(hdb)) {
+        set_msg(db, "Can't close attr2id", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
+    tchdbdel(hdb);
+
     return 0;
 }
 
@@ -211,7 +233,7 @@ oDB_create(oDB* db, const char* path, const char* attrs[], int attrs_num)
     if (create_attrs_index(db, attrs_dir, attrs, attrs_num) != 0) {
         return 1;
     }
-    if (create_attr2id(db, path) != 0) {
+    if (create_attr2id(db, path, attrs, attrs_num) != 0) {
         return 1;
     }
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
@@ -599,11 +621,23 @@ normalize_doc(char* dest, const char* src)
 }
 
 int
-oDB_put(oDB* db, const char* doc)
+oDB_put(oDB* db, const char* doc, oAttr attrs[], int attrs_num)
 {
     char* normalized = (char*)alloca(strlen(doc) + 1);
     normalize_doc(normalized, doc);
-    return put_normalized_doc(db, normalized);
+    if (put_normalized_doc(db, normalized) != 0) {
+        return 1;
+    }
+
+    int i;
+    for (i = 0; i < attrs_num; i++) {
+        const char* val = attrs[i].val;
+        char* normalized = (char*)alloca(strlen(val) + 1);
+        normalize_doc(normalized, val);
+        /* TODO */
+    }
+
+    return 0;
 }
 
 struct Posting {

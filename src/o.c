@@ -10,8 +10,6 @@
 #include "o.h"
 #include "o/private.h"
 
-#define MAX_ATTRS 32
-
 static void
 usage()
 {
@@ -84,12 +82,12 @@ close_db(oDB* db)
 }
 
 static int
-put_doc(oDB* db, const char* path, const char* doc)
+put_doc(oDB* db, const char* path, const char* doc, oAttr attrs[], int attrs_num)
 {
     if (open_db_to_write(db, path) != 0) {
         return 1;
     }
-    if (oDB_put(db, doc) != 0) {
+    if (oDB_put(db, doc, attrs, attrs_num) != 0) {
         print_error("Can't put document", db->msg);
         return 1;
     }
@@ -133,12 +131,7 @@ search(oDB* db, int argc, char* argv[])
 static int
 put(oDB* db, int argc, char* argv[])
 {
-    struct Attr {
-        const char* name;
-        const char* val;
-    };
-    typedef struct Attr Attr;
-    Attr attrs[MAX_ATTRS];
+    oAttr attrs[MAX_ATTRS];
     int attrs_num = 0;
 
     struct option options[] = {
@@ -179,7 +172,7 @@ put(oDB* db, int argc, char* argv[])
     if (doc == NULL) {
         return 1;
     }
-    int status = put_doc(db, argv[optind], doc);
+    int status = put_doc(db, argv[optind], doc, attrs, attrs_num);
     free(doc);
 
     return status;
