@@ -149,21 +149,42 @@ make_dir(oDB* db, const char* path)
     return 0;
 }
 
-static int
-make_attr_dir(oDB* db, const char* path)
+static void
+format_attrs_dir(char* s, size_t size, const char* dir)
 {
-    char dir[1024];
-    snprintf(dir, array_sizeof(dir), "%s/attrs", path);
-    return make_dir(db, dir);
+    snprintf(s, size, "%s/attrs", dir);
+}
+
+static int
+create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
+{
+    int i;
+    for (i = 0; i < attrs_num; i++) {
+        TCHDB* hdb = tchdbnew();
+        char path[1024];
+        snprintf(path, array_sizeof(path), "%s/%s.tch", dir, attrs[i]);
+        if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
+            return 1;
+        }
+        if (!tchdbclose(hdb)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int
-oDB_create(oDB* db, const char* path, const char* attrs[])
+oDB_create(oDB* db, const char* path, const char* attrs[], int attrs_num)
 {
     if (make_dir(db, path) != 0) {
         return 1;
     }
-    if (make_attr_dir(db, path) != 0) {
+    char attrs_dir[1024];
+    format_attrs_dir(attrs_dir, array_sizeof(attrs_dir), path);
+    if (make_dir(db, attrs_dir) != 0) {
+        return 1;
+    }
+    if (create_attrs_index(db, attrs_dir, attrs, attrs_num) != 0) {
         return 1;
     }
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
