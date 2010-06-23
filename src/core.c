@@ -140,7 +140,7 @@ close_index(oDB* db)
 }
 
 int
-oDB_create(oDB* db, const char* path)
+oDB_create(oDB* db, const char* path, const char* attrs[])
 {
     if (mkdir(path, 0755) != 0) {
         oDB_set_msg_of_errno(db, "mkdir failed");

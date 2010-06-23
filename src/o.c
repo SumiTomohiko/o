@@ -14,10 +14,10 @@ static void
 usage()
 {
     printf("usage:\n");
-    printf("  o create db\n");
-    printf("  o get db docid\n");
-    printf("  o put db\n");
-    printf("  o search [--fuzzy] db phrase\n");
+    printf("  o create [--attr=name] db\n");
+    printf("  o get [--attr=name] db doc_id\n");
+    printf("  o put [--attr=name:value] db\n");
+    printf("  o search db phrase\n");
     printf("  o words db\n");
 }
 
@@ -100,12 +100,12 @@ put_doc(oDB* db, const char* path, const char* doc)
 static int
 search(oDB* db, int argc, char* argv[])
 {
-    if (argc < 2) {
+    if (argc < 3) {
         usage();
         return 1;
     }
 
-    int optind = 0;
+    int optind = 1;
     const char* path = argv[optind];
     if (open_db_to_read(db, path) != 0) {
         return 1;
@@ -148,11 +148,31 @@ put(oDB* db, int argc, char* argv[])
 static int
 create(oDB* db, int argc, char* argv[])
 {
-    if (argc < 1) {
+    const char* attrs[32];
+    int attrs_num = 0;
+
+    struct option options[] = {
+        { "attr", required_argument, NULL, 'a' },
+        { 0, 0, 0, 0 } };
+    int opt;
+    while ((opt = getopt_long(argc, argv, "", options, NULL)) != -1) {
+        switch (opt) {
+        case 'a':
+            attrs[attrs_num] = optarg;
+            attrs_num++;
+            break;
+        case '?':
+        default:
+            return 1;
+            break;
+        }
+    }
+    if (argc <= optind) {
         usage();
         return 1;
     }
-    if (oDB_create(db, argv[0]) != 0) {
+
+    if (oDB_create(db, argv[optind], attrs) != 0) {
         print_error("Can't create database", db->msg);
         return 1;
     }
@@ -189,11 +209,11 @@ get(oDB* db, int argc, char* argv[])
 static int
 words(oDB* db, int argc, char* argv[])
 {
-    if (argc < 1) {
+    if (argc < 2) {
         usage();
         return 1;
     }
-    if (open_db_to_read(db, argv[0]) != 0) {
+    if (open_db_to_read(db, argv[1]) != 0) {
         return 1;
     }
 
@@ -222,22 +242,20 @@ do_cmd(oDB* db, int argc, char* argv[])
     }
 
     const char* cmd = argv[0];
-    int cmd_argc = argc - 1;
-    char** cmd_argv = argv + 1;
     if (strcmp(cmd, "create") == 0) {
-        return create(db, cmd_argc, cmd_argv);
+        return create(db, argc, argv);
     }
     if (strcmp(cmd, "put") == 0) {
-        return put(db, cmd_argc, cmd_argv);
+        return put(db, argc, argv);
     }
     if (strcmp(cmd, "search") == 0) {
-        return search(db, cmd_argc, cmd_argv);
+        return search(db, argc, argv);
     }
     if (strcmp(cmd, "words") == 0) {
-        return words(db, cmd_argc, cmd_argv);
+        return words(db, argc, argv);
     }
     if (strcmp(cmd, "get") == 0) {
-        return get(db, cmd_argc, cmd_argv);
+        return get(db, argc, argv);
     }
     usage();
     return 1;

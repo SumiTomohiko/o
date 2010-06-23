@@ -28,7 +28,7 @@ struct oHits {
 
 typedef struct oHits oHits;
 
-int oDB_create(oDB* db, const char* path);
+int oDB_create(oDB* db, const char* path, const char* attrs[]);
 void oDB_init(oDB* db);
 void oDB_fini(oDB* db);
 int oDB_open_to_read(oDB* db, const char* path);
