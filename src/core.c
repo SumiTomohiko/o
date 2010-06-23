@@ -162,19 +162,24 @@ format_attrs_dir(char* s, size_t size, const char* dir)
 }
 
 static int
-create_tchdb(oDB* db, const char* path)
+open_attr(oDB* db, TCHDB* hdb, const char* dir, const char* attr, int omode)
 {
-    TCHDB* hdb = tchdbnew();
-    if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
-        set_msg(db, "Can't create Tokyo Cabinet Hash Database", tchdberrmsg(tchdbecode(hdb)));
+    char path[1024];
+    snprintf(path, array_sizeof(path), "%s/%s.tch", dir, attr);
+    if (!tchdbopen(hdb, path, omode)) {
+        set_msg(db, "Can't attribute index", tchdberrmsg(tchdbecode(hdb)));
         return 1;
     }
-    if (!tchdbclose(hdb)) {
-        set_msg(db, "Can't close Tokyo Cabinet Hash Database", tchdberrmsg(tchdbecode(hdb)));
-        return 1;
-    }
-    tchdbdel(hdb);
+    return 0;
+}
 
+static int
+close_attr(oDB* db, TCHDB* hdb)
+{
+    if (!tchdbclose(hdb)) {
+        set_msg(db, "Can't close attribute index", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
     return 0;
 }
 
@@ -183,11 +188,30 @@ create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 {
     int i;
     for (i = 0; i < attrs_num; i++) {
-        char path[1024];
-        snprintf(path, array_sizeof(path), "%s/%s.tch", dir, attrs[i]);
-        if (create_tchdb(db, path) != 0) {
+        TCHDB* hdb = tchdbnew();
+        if (open_attr(db, hdb, dir, attrs[i], HDBOWRITER | HDBOCREAT) != 0) {
+            tchdbdel(hdb);
             return 1;
         }
+        if (close_attr(db, hdb) != 0) {
+            tchdbdel(hdb);
+            return 1;
+        }
+        tchdbdel(hdb);
+        return 1;
+    }
+    return 0;
+}
+
+static int
+open_attr2id(oDB* db, const char* dir, int omode)
+{
+    char path[1024];
+    snprintf(path, array_sizeof(path), "%s/attr2id.tch", dir);
+    TCHDB* hdb = db->attr2id;
+    if (!tchdbopen(hdb, path, omode)) {
+        set_msg(db, "Can't open attr2id", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
     }
     return 0;
 }
@@ -195,13 +219,10 @@ create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 static int
 create_attr2id(oDB* db, const char* dir, const char* attrs[], int attrs_num)
 {
-    char path[1024];
-    snprintf(path, array_sizeof(path), "%s/attr2id.tch", dir);
-    TCHDB* hdb = tchdbnew();
-    if (!tchdbopen(hdb, path, HDBOWRITER | HDBOCREAT)) {
-        set_msg(db, "Can't create attr2id", tchdberrmsg(tchdbecode(hdb)));
+    if (open_attr2id(db, dir, HDBOWRITER | HDBOCREAT) != 0) {
         return 1;
     }
+    TCHDB* hdb = db->attr2id;
     int i;
     for (i = 0; i < attrs_num; i++) {
         const char* attr = attrs[i];
@@ -214,8 +235,31 @@ create_attr2id(oDB* db, const char* dir, const char* attrs[], int attrs_num)
         set_msg(db, "Can't close attr2id", tchdberrmsg(tchdbecode(hdb)));
         return 1;
     }
-    tchdbdel(hdb);
 
+    return 0;
+}
+
+static int
+create_index(oDB* db, const char* path)
+{
+    if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
+        return 1;
+    }
+    if (close_index(db) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+static int
+create_doc(oDB* db, const char* path)
+{
+    if (open_doc(db, path, HDBOWRITER | HDBOCREAT) != 0) {
+        return 1;
+    }
+    if (close_doc(db) != 0) {
+        return 1;
+    }
     return 0;
 }
 
@@ -236,19 +280,24 @@ oDB_create(oDB* db, const char* path, const char* attrs[], int attrs_num)
     if (create_attr2id(db, path, attrs, attrs_num) != 0) {
         return 1;
     }
-    if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
-        return 1;
-    }
-    if (close_index(db) != 0) {
+    if (create_index(db, path) != 0) {
         return 1;
     }
     if (write_doc_id(db, path, 0) != 0) {
         return 1;
     }
-    if (open_doc(db, path, HDBOWRITER | HDBOCREAT) != 0) {
+    if (create_doc(db, path) != 0) {
         return 1;
     }
-    if (close_doc(db) != 0) {
+    return 0;
+}
+
+static int
+close_attr2id(oDB* db)
+{
+    TCHDB* hdb = db->attr2id;
+    if (!tchdbclose(hdb)) {
+        set_msg(db, "Can't close attr2id", tchdberrmsg(tchdbecode(hdb)));
         return 1;
     }
     return 0;
@@ -258,6 +307,16 @@ int
 oDB_close(oDB* db)
 {
     int status = 0;
+    TCHDB** phdb;
+    for (phdb = &db->attrs[0]; *phdb != NULL; phdb++) {
+        if (close_attr(db, *phdb) != 0) {
+            status = 1;
+        }
+        tchdbdel(*phdb);
+    }
+    if (close_attr2id(db) != 0) {
+        status = 1;
+    }
     if (close_doc(db) != 0) {
         status = 1;
     }
@@ -309,6 +368,31 @@ copy_path(oDB* db, const char* path)
 }
 
 static int
+open_attrs(oDB* db, const char* path, int omode)
+{
+    char dir[1024];
+    format_attrs_dir(dir, array_sizeof(dir), path);
+
+    TCHDB* hdb = db->attr2id;
+    if (!tchdbiterinit(hdb)) {
+        set_msg(db, "Can't initialize iterator", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
+    char* key;
+    while ((key = tchdbiternext2(hdb)) != NULL) {
+        int sp;
+        int* pindex = (int*)tchdbget(hdb, key, strlen(key), &sp);
+        TCHDB* attr = tchdbnew();
+        if (open_attr(db, attr, dir, key, omode) != 0) {
+            return 1;
+        }
+        db->attrs[*pindex] = attr;
+        free(key);
+    }
+    return 0;
+}
+
+static int
 open_db(oDB* db, const char* path, int lock_operation, int index_mode, int doc_mode)
 {
     if (copy_path(db, path) != 0) {
@@ -324,6 +408,12 @@ open_db(oDB* db, const char* path, int lock_operation, int index_mode, int doc_m
         return 1;
     }
     if (open_doc(db, path, doc_mode) != 0) {
+        return 1;
+    }
+    if (open_attr2id(db, path, HDBOREADER) != 0) {
+        return 1;
+    }
+    if (open_attrs(db, path, doc_mode) != 0) {
         return 1;
     }
     return 0;
