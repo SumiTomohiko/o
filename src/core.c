@@ -139,11 +139,31 @@ close_index(oDB* db)
     return 0;
 }
 
-int
-oDB_create(oDB* db, const char* path, const char* attrs[])
+static int
+make_dir(oDB* db, const char* path)
 {
     if (mkdir(path, 0755) != 0) {
         oDB_set_msg_of_errno(db, "mkdir failed");
+        return 1;
+    }
+    return 0;
+}
+
+static int
+make_attr_dir(oDB* db, const char* path)
+{
+    char dir[1024];
+    snprintf(dir, array_sizeof(dir), "%s/attrs", path);
+    return make_dir(db, dir);
+}
+
+int
+oDB_create(oDB* db, const char* path, const char* attrs[])
+{
+    if (make_dir(db, path) != 0) {
+        return 1;
+    }
+    if (make_attr_dir(db, path) != 0) {
         return 1;
     }
     if (open_index(db, path, BDBOWRITER | BDBOCREAT) != 0) {
