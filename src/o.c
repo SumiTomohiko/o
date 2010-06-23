@@ -10,6 +10,8 @@
 #include "o.h"
 #include "o/private.h"
 
+#define MAX_ATTRS 32
+
 static void
 usage()
 {
@@ -131,7 +133,45 @@ search(oDB* db, int argc, char* argv[])
 static int
 put(oDB* db, int argc, char* argv[])
 {
-    if (argc < 1) {
+    struct Attr {
+        const char* name;
+        const char* val;
+    };
+    typedef struct Attr Attr;
+    Attr attrs[MAX_ATTRS];
+    int attrs_num = 0;
+
+    struct option options[] = {
+        { "attr", required_argument, NULL, 'a' },
+        { 0, 0, 0, 0 } };
+    int opt;
+    while ((opt = getopt_long(argc, argv, "", options, NULL)) != -1) {
+        switch (opt) {
+        case 'a':
+            if (MAX_ATTRS <= attrs_num) {
+                fprintf(stderr, "At most %d attributes acceptable", MAX_ATTRS);
+                return 1;
+            }
+            {
+                char* pc = strchr(optarg, ':');
+                if (pc == NULL) {
+                    fprintf(stderr, "Attribute must be NAME:VALUE");
+                    return 1;
+                }
+                *pc = '\0';
+                attrs[attrs_num].name = optarg;
+                attrs[attrs_num].val = pc + 1;
+                attrs_num++;
+            }
+            break;
+        case '?':
+        default:
+            usage();
+            return 1;
+            break;
+        }
+    }
+    if (argc <= optind) {
         usage();
         return 1;
     }
@@ -139,7 +179,7 @@ put(oDB* db, int argc, char* argv[])
     if (doc == NULL) {
         return 1;
     }
-    int status = put_doc(db, argv[0], doc);
+    int status = put_doc(db, argv[optind], doc);
     free(doc);
 
     return status;
@@ -148,7 +188,6 @@ put(oDB* db, int argc, char* argv[])
 static int
 create(oDB* db, int argc, char* argv[])
 {
-#define MAX_ATTRS 32
     const char* attrs[MAX_ATTRS];
     int attrs_num = 0;
 
@@ -168,6 +207,7 @@ create(oDB* db, int argc, char* argv[])
             break;
         case '?':
         default:
+            usage();
             return 1;
             break;
         }
@@ -182,7 +222,6 @@ create(oDB* db, int argc, char* argv[])
         return 1;
     }
     return 0;
-#undef MAX_ATTRS
 }
 
 static int
