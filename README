@@ -11,10 +11,18 @@ About name
 ----------
 
 o is pronounced as "shaling". "Shaling" is a Japanese, and means a "wheel". o's
-shape is wheel, so this is "shaling".
+shape is a wheel, so this is "shaling".
 
 There is a mailer named Shaling
 (http://www.unixuser.org/~euske/python/shaling/), nobody will be confused.
+
+Features
+--------
+
+* N-gram method
+* Fuzzy search
+* Attributes
+* UTF-8
 
 Requirements
 ------------
@@ -34,6 +42,11 @@ Issue tracking system and known bugs
 This project uses ditz (http://ditz.rubyforge.org/) as an issues management
 system. You can see issues and known bugs at
 http://neko-daisuki.ddo.jp/~SumiTomohiko/o/issues/.
+
+Restrictions
+------------
+
+* Fuzzy search cannot search attributes.
 
 Development plans and progress
 ------------------------------
