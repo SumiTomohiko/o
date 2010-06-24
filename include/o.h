@@ -47,7 +47,8 @@ int oDB_open_to_read(oDB* db, const char* path);
 int oDB_open_to_write(oDB* db, const char* path);
 int oDB_close(oDB* db);
 int oDB_put(oDB* db, const char* doc, oAttr attrs[], int attrs_num);
-char* oDB_get(oDB* db, o_doc_id_t doc_id, int* size);
+char* oDB_get(oDB* db, o_doc_id_t doc_id);
+char* oDB_get_attr(oDB* db, o_doc_id_t doc_id, const char* attr);
 int oDB_search(oDB* db, const char* phrase, oHits** hits);
 void oDB_set_msg_of_errno(oDB* db, const char* msg);
 

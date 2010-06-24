@@ -558,7 +558,7 @@ compress_doc(oDB* db, const char* doc, size_t size)
 }
 
 char*
-oDB_get(oDB* db, o_doc_id_t doc_id, int* size)
+oDB_get(oDB* db, o_doc_id_t doc_id)
 {
     int sp;
     char* compressed = (char*)tchdbget(db->doc, &doc_id, sizeof(doc_id), &sp);
@@ -608,15 +608,15 @@ oDB_get(oDB* db, o_doc_id_t doc_id, int* size)
     }
     free(compressed);
 
-    *size = tcxstrsize(doc) + 1;
-    char* s = (char*)malloc(*size);
+    int size = tcxstrsize(doc) + 1;
+    char* s = (char*)malloc(size);
     if (s == NULL) {
         oDB_set_msg_of_errno(db, "Can't allocate string");
         tcxstrdel(doc);
         return NULL;
     }
-    memcpy(s, tcxstrptr(doc), *size - 1);
-    s[*size - 1] = '\0';
+    memcpy(s, tcxstrptr(doc), size - 1);
+    s[size - 1] = '\0';
     tcxstrdel(doc);
 
     return s;
@@ -1400,6 +1400,18 @@ oDB_search(oDB* db, const char* phrase, oHits** phits)
 {
     oNode* node = oParser_parse(db, phrase);
     return eval(db, node, phits);
+}
+
+char*
+oDB_get_attr(oDB* db, o_doc_id_t doc_id, const char* attr)
+{
+    o_attr_id_t attr_id = get_attr_id(db, attr);
+    if (attr_id == -1) {
+        set_msg(db, "Attribute not found", attr);
+        return NULL;
+    }
+    int sp;
+    return (char*)tchdbget(db->attrs[attr_id], &doc_id, sizeof(doc_id), &sp);
 }
 
 /**

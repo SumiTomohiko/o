@@ -220,16 +220,34 @@ create(oDB* db, int argc, char* argv[])
 static int
 get(oDB* db, int argc, char* argv[])
 {
-    if (argc < 2) {
+    const char* attr = NULL;
+    struct option options[] = {
+        { "attr", required_argument, NULL, 'a' },
+        { 0, 0, 0, 0 } };
+    int opt;
+    while ((opt = getopt_long(argc, argv, "", options, NULL)) != -1) {
+        switch (opt) {
+        case 'a':
+            attr = optarg;
+            break;
+        case '?':
+        default:
+            usage();
+            return 1;
+            break;
+        }
+    }
+    if (argc - 1 <= optind) {
         usage();
         return 1;
     }
-    if (open_db_to_read(db, argv[0]) != 0) {
+    const char* path = argv[optind];
+    if (open_db_to_read(db, path) != 0) {
         return 1;
     }
 
-    int size;
-    char* doc = oDB_get(db, atoi(argv[1]), &size);
+    o_doc_id_t doc_id = atoi(argv[optind + 1]);
+    char* doc = attr == NULL ? oDB_get(db, doc_id) : oDB_get_attr(db, doc_id, attr);
     if (doc == NULL) {
         print_error("Can't get document", db->msg);
         close_db(db);
