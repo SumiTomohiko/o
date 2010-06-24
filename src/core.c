@@ -1057,7 +1057,7 @@ search_fuzzily(oDB* db, const char* phrase, oHits** phits)
         int i;
         for (i = 0; i < doc_num; i++) {
             Posting* posting = *((Posting**)tclistval2(posting_list, i));
-            if (posting->attr_id == -1) {
+            if (posting->attr_id != -1) {
                 continue;
             }
             int sp;
