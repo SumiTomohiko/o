@@ -198,7 +198,6 @@ create_attrs_index(oDB* db, const char* dir, const char* attrs[], int attrs_num)
             return 1;
         }
         tchdbdel(hdb);
-        return 1;
     }
     return 0;
 }
@@ -272,22 +271,22 @@ oDB_create(oDB* db, const char* path, const char* attrs[], int attrs_num)
     char attrs_dir[1024];
     format_attrs_dir(attrs_dir, array_sizeof(attrs_dir), path);
     if (make_dir(db, attrs_dir) != 0) {
-        return 1;
+        return 2;
     }
     if (create_attrs_index(db, attrs_dir, attrs, attrs_num) != 0) {
-        return 1;
+        return 3;
     }
     if (create_attr2id(db, path, attrs, attrs_num) != 0) {
-        return 1;
+        return 4;
     }
     if (create_index(db, path) != 0) {
-        return 1;
+        return 5;
     }
     if (write_doc_id(db, path, 0) != 0) {
-        return 1;
+        return 6;
     }
     if (create_doc(db, path) != 0) {
-        return 1;
+        return 7;
     }
     return 0;
 }

@@ -210,9 +210,10 @@ create(oDB* db, int argc, char* argv[])
         return 1;
     }
 
-    if (oDB_create(db, argv[optind], attrs, attrs_num) != 0) {
+    int status = oDB_create(db, argv[optind], attrs, attrs_num);
+    if (status != 0) {
         print_error("Can't create database", db->msg);
-        return 1;
+        return status;
     }
     return 0;
 }
