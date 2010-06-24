@@ -1,0 +1,10 @@
+#!/bin/sh
+
+db="${TMPDIR}/db"
+${O} create --attr=foo "${db}"
+echo -n | ${O} put --attr=foo:bar "${db}"
+if [ X"`${O} search "${db}" bar`" != X"0" ]; then
+  exit 1
+fi
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
