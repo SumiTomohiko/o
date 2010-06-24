@@ -480,7 +480,7 @@ compress_num(int n, char* p, int* size)
 }
 
 static void
-compress_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data_size)
+compress_posting(o_doc_id_t doc_id, o_attr_id_t attr_id, int* pos, int pos_num, char* data, int* data_size)
 {
     char* p = data;
 #define COMPRESS(num) do { \
@@ -488,7 +488,11 @@ compress_posting(o_doc_id_t doc_id, int* pos, int pos_num, char* data, int* data
     compress_num((num), p, &size); \
     p += size; \
 } while (0)
-    COMPRESS(doc_id);
+    int tagged_doc_id = (doc_id << 1) + (attr_id == -1 ? 0 : 1);
+    COMPRESS(tagged_doc_id);
+    if (attr_id != -1) {
+        COMPRESS(attr_id);
+    }
     COMPRESS(pos_num);
 
     int i;
@@ -636,7 +640,7 @@ put_doc(oDB* db, o_doc_id_t doc_id, const char* doc, size_t size)
 typedef int offset_t;
 
 static int
-put_normalized_doc(oDB* db, const char* doc)
+put_index(oDB* db, o_doc_id_t doc_id, o_attr_id_t attr_id, const char* doc)
 {
     TCMAP* term2pos = tcmapnew();
     size_t size = strlen(doc);
@@ -650,8 +654,6 @@ put_normalized_doc(oDB* db, const char* doc)
         offset++;
     }
 
-    o_doc_id_t doc_id = db->next_doc_id;
-
     tcmapiterinit(term2pos);
     int key_size;
     const void* key;
@@ -662,25 +664,18 @@ put_normalized_doc(oDB* db, const char* doc)
         assert(val_size % sizeof(int) == 0);
         int pos_num = val_size / sizeof(int);
         /**
-         * 1 of (1 + pos_num) is for a document id. Each number in postings
-         * needs 8 bytes at most.
+         * 2 of (2 + pos_num) is for a document ID and a attribute ID. Each
+         * number in postings needs 8 bytes at most.
          */
-        char data[(1 + pos_num) * 8];
+        char data[(2 + pos_num) * 8];
         int data_size;
-        compress_posting(doc_id, (int*)val, pos_num, data, &data_size);
+        compress_posting(doc_id, attr_id, (int*)val, pos_num, data, &data_size);
         if (!tcbdbputdup(db->index, key, key_size, data, data_size)) {
             set_msg(db, "Can't register any term", tcbdberrmsg(tcbdbecode(db->index)));
             return 1;
         }
     }
-
     tcmapdel(term2pos);
-
-    if (put_doc(db, doc_id, doc, size) != 0) {
-        return 1;
-    }
-
-    db->next_doc_id++;
 
     return 0;
 }
@@ -710,28 +705,71 @@ normalize_doc(char* dest, const char* src)
     *(last + 1) = '\0';
 }
 
+static o_attr_id_t
+get_attr_id(oDB* db, const char* name)
+{
+    int sp;
+    o_attr_id_t* pid = (o_attr_id_t*)tchdbget(db->attr2id, name, strlen(name), &sp);
+    if (pid == NULL) {
+        return -1;
+    }
+    return *pid;
+}
+
+static int
+put_attr(oDB* db, o_doc_id_t doc_id, o_attr_id_t attr_id, const char* doc)
+{
+    TCHDB* hdb = db->attrs[attr_id];
+    if (!tchdbput(hdb, &doc_id, sizeof(doc_id), doc, strlen(doc))) {
+        set_msg(db, "Can't put attribute", tchdberrmsg(tchdbecode(hdb)));
+        return 1;
+    }
+    return 0;
+}
+
 int
 oDB_put(oDB* db, const char* doc, oAttr attrs[], int attrs_num)
 {
-    char* normalized = (char*)alloca(strlen(doc) + 1);
-    normalize_doc(normalized, doc);
-    if (put_normalized_doc(db, normalized) != 0) {
+    o_doc_id_t doc_id = db->next_doc_id;
+
+#define NORMALIZE(normalized, text) do { \
+    normalized = (char*)alloca(strlen((text)) + 1); \
+    normalize_doc(normalized, (text)); \
+} while (0)
+    char* normalized;
+    NORMALIZE(normalized, doc);
+    if (put_index(db, doc_id, -1, normalized) != 0) {
+        return 1;
+    }
+    if (put_doc(db, doc_id, normalized, strlen(normalized)) != 0) {
         return 1;
     }
 
     int i;
     for (i = 0; i < attrs_num; i++) {
-        const char* val = attrs[i].val;
-        char* normalized = (char*)alloca(strlen(val) + 1);
-        normalize_doc(normalized, val);
-        /* TODO */
+        o_attr_id_t attr_id = get_attr_id(db, attrs[i].name);
+        if (attr_id == -1) {
+            return 1;
+        }
+        char* normalized;
+        NORMALIZE(normalized, attrs[i].val);
+        if (put_index(db, doc_id, attr_id, normalized) != 0) {
+            return 1;
+        }
+        if (put_attr(db, doc_id, attr_id, normalized) != 0) {
+            return 1;
+        }
     }
+#undef NORMALIZE
+
+    db->next_doc_id++;
 
     return 0;
 }
 
 struct Posting {
     o_doc_id_t doc_id;
+    o_attr_id_t attr_id;
     int term_size;
     offset_t* offset;
     int offset_size;
@@ -785,6 +823,7 @@ Posting_new(oDB* db)
         return NULL;
     }
     posting->doc_id = 0;
+    posting->attr_id = -1;
     posting->term_size = 0;
     posting->offset = NULL;
     posting->offset_size = 0;
@@ -821,9 +860,14 @@ decompress_posting(oDB* db, const char* compressed_posting)
     num = decompress_num(p, &size); \
     p += size; \
 } while (0)
-    o_doc_id_t doc_id;
-    DECOMPRESS(doc_id);
-    posting->doc_id = doc_id;
+    o_doc_id_t tagged_doc_id;
+    DECOMPRESS(tagged_doc_id);
+    posting->doc_id = tagged_doc_id >> 1;
+    if ((tagged_doc_id & 1) != 0) {
+        o_attr_id_t attr_id;
+        DECOMPRESS(attr_id);
+        posting->attr_id = attr_id;
+    }
 
     int offset_size;
     DECOMPRESS(offset_size);
@@ -897,6 +941,14 @@ intersect(oDB* db, TCLIST* posting_list1, TCLIST* posting_list2, int gap)
             continue;
         }
         if (posting2->doc_id < posting1->doc_id) {
+            j++;
+            continue;
+        }
+        if (posting1->attr_id < posting2->attr_id) {
+            i++;
+            continue;
+        }
+        if (posting2->attr_id < posting1->attr_id) {
             j++;
             continue;
         }
@@ -1005,6 +1057,9 @@ search_fuzzily(oDB* db, const char* phrase, oHits** phits)
         int i;
         for (i = 0; i < doc_num; i++) {
             Posting* posting = *((Posting**)tclistval2(posting_list, i));
+            if (posting->attr_id == -1) {
+                continue;
+            }
             int sp;
             o_doc_id_t doc_id = posting->doc_id;
             TCLIST** p = (TCLIST**)tcmapget(doc2hits, &doc_id, sizeof(doc_id), &sp);

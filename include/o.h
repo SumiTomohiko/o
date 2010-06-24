@@ -9,6 +9,7 @@
 #include "tcutil.h"
 
 typedef int o_doc_id_t;
+typedef int o_attr_id_t;
 
 #define MAX_ATTRS 32
 
