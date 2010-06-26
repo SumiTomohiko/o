@@ -13,6 +13,8 @@ config.log
 config.status
 config.sub
 core
+demo/done.txt
+demo/waitings.txt
 depcomp
 include/o/config.h
 include/o/config.h.in
