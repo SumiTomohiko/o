@@ -1,0 +1,95 @@
+
+from socket import TcpSocket
+
+DONE_PATH = "done.txt"
+WAITING_PATH = "waitings.txt"
+
+def read_done()
+  done = {}
+  try
+    File.open(DONE_PATH, "r") do [fp]
+      while line = fp.readline()
+        done[line.trim()] = true
+      end
+    end
+  except SystemError
+  end
+  return done
+end
+
+def read_waitings()
+  waitings = []
+  try
+    File.open(WAITING_PATH, "r") do [fp]
+      while line = fp.readline()
+        waitings << line.trim()
+      end
+    end
+  except SystemError
+  end
+  return waitings
+end
+
+def http_request(host, path)
+  sock = TcpSocket.new(host, 80)
+  try
+    sock.send("GET {0} HTTP/1.1\r\n".format(path))
+    sock.send("Host: {0}\r\n".format(host))
+    sock.send("\r\n")
+    loop() do
+      line = sock.readline().trim()
+      if line.size == 0
+        break
+      end
+      pair = line.split()
+      if pair[0] == "Content-Length:"
+        length = pair[1].to_i()
+      end
+    end
+    html = ""
+    rest = length
+    while 0 < rest
+      content = sock.recv(rest)
+      html << content
+      rest -= content.size
+    end
+  finally
+    sock.close()
+  end
+  return html
+end
+
+def fetch(word)
+  host = "uncyclopedia.wikia.com"
+  path = "/wiki/{0}".format(word)
+  html = http_request(host, path)
+end
+
+def write_done(done)
+  File.open(DONE_PATH, "w") do [fp]
+    done.each() do [word, _]
+      fp.write(word + "\n")
+    end
+  end
+end
+
+def write_waitings(waitings)
+  File.open(WAITING_PATH, "w") do [fp]
+    waitings.each() do [word]
+      fp.write(word + "\n")
+    end
+  end
+end
+
+done = read_done()
+waitings = read_waitings()
+if waitings.size == 0
+  waitings << "Hentai"
+end
+word = waitings[0]
+fetch(word)
+done[word] = 1
+write_done(done)
+write_waitings(waitings.slice(1))
+
+# vim: tabstop=2 shiftwidth=2 expandtab softtabstop=2
