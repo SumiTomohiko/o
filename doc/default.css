@@ -1,9 +1,7 @@
 
 body {
-  margin-top: 1.0em;
   background-color: #f3dfac;
-  font-family: "Helvetica,Arial,FreeSans";
-  color: #000000;
+  margin: 0px;
 }
 #container {
   margin: 0 auto;
