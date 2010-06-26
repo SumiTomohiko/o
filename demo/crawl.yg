@@ -42,7 +42,7 @@ def http_request(host, path)
         break
       end
       pair = line.split()
-      if pair[0] == "Content-Length:"
+      if pair[0].trim() == "Content-Length:"
         length = pair[1].to_i()
       end
     end
@@ -59,10 +59,27 @@ def http_request(host, path)
   return html
 end
 
+def cut_head(html)
+  m = (html =~ /<\/head>/)
+  pos = m.end()
+  return html.slice(pos)
+end
+
+def erase_tags(body)
+  s = body
+  while m = (s =~ /<[^>]*>/)
+    s = s.slice(0, m.start()) + s.slice(m.end())
+  end
+  return s
+end
+
 def fetch(word)
   host = "uncyclopedia.wikia.com"
   path = "/wiki/{0}".format(word)
   html = http_request(host, path)
+  body = cut_head(html)
+  content = erase_tags(body)
+  print(content)
 end
 
 def write_done(done)
